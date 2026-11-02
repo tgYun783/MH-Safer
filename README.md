@@ -11,3 +11,5 @@ Linux에서 실행 중인 터미널 지뢰찾기 게임의 핵심 변수에 대�
 ## 문서
 - [프로젝트 계획](docs/plan.md)
 - [역할 분장](docs/roles.md)
+- [스프린트 운영](docs/sprints/README.md)
+- [S1 백로그 (11-02 ~ 11-08)](docs/sprints/sprint-1.md)

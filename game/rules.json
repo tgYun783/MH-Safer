@@ -1,0 +1,90 @@
+{
+  "schema_version": "0",
+  "program": "minesweeper",
+  "note": "프로그램별 지식 전용. libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2).",
+  "detect_window_ms": 200,
+  "default_event_window_ms": 50,
+  "variables": [
+    {
+      "name": "timer",
+      "value": { "type": "scalar", "size": 4, "signed": true, "encoding": "int", "compare": "value" },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["tick"],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": { "rule": "delta_eq", "params": { "delta": 1 } }
+    },
+    {
+      "name": "mines_remaining",
+      "value": { "type": "scalar", "size": 4, "signed": true, "encoding": "int", "compare": "value" },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["flag"],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": { "rule": "delta_in", "params": { "deltas": [-1, 1] } }
+    },
+    {
+      "name": "mine_field",
+      "value": { "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash" },
+      "behavior": {
+        "mutable": false,
+        "allowed_in_tags": [],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": { "rule": "immutable", "params": {} }
+    },
+    {
+      "name": "cell_state",
+      "value": { "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash" },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["reveal"],
+        "required_event": "input",
+        "event_window_ms": 50
+      },
+      "prediction": {
+        "rule": "per_element_monotonic",
+        "params": {
+          "direction": "open_only",
+          "note": "열린 칸은 다시 닫히지 않음. 요소별 단방향 비교 필요 — 블록 해시로는 불충분. 비교 방식 미정(S1-24/monitoring-design §3 [결정 필요])."
+        }
+      }
+    },
+    {
+      "name": "cells_opened",
+      "value": { "type": "scalar", "size": 4, "signed": false, "encoding": "uint", "compare": "value" },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["reveal"],
+        "required_event": "input",
+        "event_window_ms": 50
+      },
+      "prediction": { "rule": "monotonic", "params": { "direction": "non_decreasing" } }
+    },
+    {
+      "name": "game_state",
+      "value": {
+        "type": "scalar", "size": 4, "signed": false, "encoding": "enum", "compare": "value",
+        "enum": { "states": ["playing", "won", "lost"], "codes": null }
+      },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["win-check"],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": {
+        "rule": "enum_transition",
+        "params": {
+          "allowed": [["playing", "won"], ["playing", "lost"]],
+          "note": "승리 정당성(모든 안전 칸 오픈)은 변수 간 일관성 검사 — 섀도 값 비교 단독으로는 불가. cells_opened 교차검사 필요, 미정(S1-24/L4)."
+        }
+      }
+    }
+  ]
+}

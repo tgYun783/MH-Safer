@@ -19,14 +19,14 @@
 ### 윤태건 (PM)
 | ID | 항목 | 우선순위 | 추정 | 완료 기준 |
 |---|---|---|---|---|
-| S1-01 | 저장소 골격: `libmtd/{include,src,tests}`, `game/`, `injector/`, `bench/`, `examples/`, `docs/` + 최상위 CMake, 테스트는 CTest | 필수 | 3h | 빈 라이브러리·테스트 1개가 `cmake -B build && cmake --build build && ctest --test-dir build`로 통과 |
-| S1-02 | 개발 환경 통일: Dockerfile(Ubuntu 24.04, gcc, cmake, gdb, python3) + 실행 스크립트 (`--cap-add SYS_PTRACE` 포함, ptrace 실험용) | 필수 | 3h | 세 명 모두 컨테이너에서 S1-01 명령 성공 (macOS 포함) |
-| S1-03 | 루트 `CLAUDE.md`: 목적, 폴더 구조, 빌드·테스트 명령, 코딩 규칙, 금지 사항, 완료 기준 | 필수 | 2h | Claude Code 새 세션에서 "빌드하고 테스트 돌려줘"만으로 S1-01 명령을 실행 |
-| S1-04 | `mtd.h` v0 + `docs/interface.md` (이벤트·판정·정답 라벨 형식) | 필수 | 3h | 헤더 컴파일 통과, 우진·전유정 리뷰 승인 |
+| S1-01 | 저장소 골격: `libmtd/{include,src,tests}`, `game/`, `injector/`, `bench/`, `examples/`, `docs/` + 최상위 CMake(C++17, `-Wall -Wextra -Werror`), 테스트는 doctest + CTest | 필수 | 3h | 빈 라이브러리·테스트 1개가 `cmake -B build && cmake --build build && ctest --test-dir build`로 통과 |
+| S1-02 | 개발 환경 통일: Dockerfile(Ubuntu 24.04, g++ 13, cmake, gdb, clang-format, python3) + 실행 스크립트 (`--cap-add SYS_PTRACE` 포함, ptrace 실험용) | 필수 | 3h | 세 명 모두 컨테이너에서 S1-01 명령 성공 (macOS 포함) |
+| S1-03 | 루트 `AGENTS.md`(지침 본문: 목적, 폴더 구조, 빌드·테스트 명령, 코딩 규칙, 금지 사항, 완료 기준) + `CLAUDE.md`(`@AGENTS.md` + Claude 전용 안내) | 필수 | 2h | Claude Code와 Codex 각각 새 세션에서 "빌드하고 테스트 돌려줘"만으로 S1-01 명령을 실행 |
+| S1-04 | `mtd.h` v0(`extern "C"` 공개 API) + `docs/interface.md` (이벤트·판정·정답 라벨 형식) | 필수 | 3h | 헤더 컴파일 통과, 우진·전유정 리뷰 승인 |
 | S1-05 | 규칙 파일 형식 v0 (`rules.json` 구조 + 지뢰찾기 예시) — 전유정과 함께 | 필수 | 2h | 지뢰찾기 감시 변수 6개의 규칙이 예시 파일에 모두 표현됨 |
 | S1-06 | CI: GitHub Actions에서 빌드 + `ctest` | 필수 | 2h | PR마다 자동 실행, 실패 시 PR에 빨간 표시 |
 | S1-07 | 협업 규칙: `main` 보호(PR + 리뷰 1명), 이슈 템플릿, GitHub Projects 보드에 S1 항목 등록 | 필수 | 1h | 보드에 S1 백로그 전 항목이 있고 `main` 직접 푸시 차단 |
-| S1-08 | 하네스 첫 훅: 파일 수정 후 해당 모듈 빌드 자동 실행 | 선택 | 2h | C 파일 수정 시 빌드가 자동으로 돌고 실패가 대화에 보임 |
+| S1-08 | 하네스 첫 훅: 파일 수정 후 해당 모듈 빌드 자동 실행 | 선택 | 2h | C++ 파일 수정 시 빌드가 자동으로 돌고 실패가 대화에 보임 |
 
 ### 우진
 | ID | 항목 | 우선순위 | 추정 | 완료 기준 |

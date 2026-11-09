@@ -5,3 +5,14 @@ build/
 __pycache__/
 .venv/
 .env
+
+# S1-11 PoC 빌드 산출물·런타임 파일
+docs/poc/selftest
+docs/poc/target
+docs/poc/injector
+docs/poc/target.info
+docs/poc/target.status
+docs/poc/shadow_target
+docs/poc/shadow_injector
+docs/poc/detect.log
+docs/poc/inject.log

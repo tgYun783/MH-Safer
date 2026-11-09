@@ -19,3 +19,5 @@ docs/poc/inject.log
 
 # CMake 빌드 산출물
 /build/
+docs/poc/sweep_target
+docs/poc/cpu.txt

@@ -16,3 +16,6 @@ docs/poc/shadow_target
 docs/poc/shadow_injector
 docs/poc/detect.log
 docs/poc/inject.log
+
+# CMake 빌드 산출물
+/build/

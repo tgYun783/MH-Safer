@@ -7,7 +7,7 @@
   "variables": [
     {
       "name": "timer",
-      "value": { "type": "scalar", "size": 4, "signed": true, "encoding": "int", "compare": "value" },
+      "value": { "type": "scalar", "size": 4, "signed": false, "encoding": "uint", "compare": "value" },
       "behavior": {
         "mutable": true,
         "allowed_in_tags": ["tick"],
@@ -29,7 +29,11 @@
     },
     {
       "name": "mine_field",
-      "value": { "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash" },
+      "value": {
+        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash",
+        "encoding": "uint",
+        "note": "첫 안전 클릭에서 한 번 배치된 뒤 불변. uint8_t 배열, 지뢰=1. 감시는 배치 후 시작하거나 최초 배치 변경을 초기화로 취급해야 함."
+      },
       "behavior": {
         "mutable": false,
         "allowed_in_tags": [],
@@ -40,7 +44,10 @@
     },
     {
       "name": "cell_state",
-      "value": { "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash" },
+      "value": {
+        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash",
+        "encoding": "uint", "note": "열림 상태만 저장(숨김=0, 열림=1). 깃발 상태는 별도 UI 상태."
+      },
       "behavior": {
         "mutable": true,
         "allowed_in_tags": ["reveal"],
@@ -70,7 +77,7 @@
       "name": "game_state",
       "value": {
         "type": "scalar", "size": 4, "signed": false, "encoding": "enum", "compare": "value",
-        "enum": { "states": ["playing", "won", "lost"], "codes": null }
+        "enum": { "states": ["playing", "won", "lost"], "codes": [0, 1, 2] }
       },
       "behavior": {
         "mutable": true,

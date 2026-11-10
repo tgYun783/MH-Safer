@@ -16,9 +16,9 @@ add_compile_options(-Wall -Wextra -Werror)
 enable_testing()
 
 add_subdirectory(libmtd)
+add_subdirectory(game)
 
 # S1-01 이후 채워지는 골격 (현재 비어 있음):
-#   game/     T1 지뢰찾기 + 자동 플레이
 #   injector/ T2 변조 주입기
 #   bench/    T5 자원 측정
 #   examples/ T4 이식성 검증용 두 번째 앱

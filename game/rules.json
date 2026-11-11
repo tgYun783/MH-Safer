@@ -30,7 +30,7 @@
     {
       "name": "mine_field",
       "value": {
-        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash",
+        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "bytes",
         "encoding": "uint",
         "note": "첫 안전 클릭에서 한 번 배치된 뒤 불변. uint8_t 배열, 지뢰=1. 감시는 배치 후 시작하거나 최초 배치 변경을 초기화로 취급해야 함."
       },
@@ -45,7 +45,7 @@
     {
       "name": "cell_state",
       "value": {
-        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "hash",
+        "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "bytes",
         "encoding": "uint", "note": "열림 상태만 저장(숨김=0, 열림=1). 깃발 상태는 별도 UI 상태."
       },
       "behavior": {
@@ -58,7 +58,7 @@
         "rule": "per_element_monotonic",
         "params": {
           "direction": "open_only",
-          "note": "열린 칸은 다시 닫히지 않음. 요소별 단방향 비교 필요 — 블록 해시로는 불충분. 비교 방식 미정(S1-24/monitoring-design §3 [결정 필요])."
+          "note": "열린 칸은 다시 닫히지 않음. 요소별 단방향 비교 — 배열 바이트 비교로 검사(11-11 결정, monitoring-design §8)."
         }
       }
     },

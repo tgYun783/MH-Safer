@@ -28,7 +28,7 @@
 | 타이머 | 구간 `"tick"` |
 | 남은 지뢰 | 구간 `"flag"` |
 | 칸 상태 / 열린 칸 수 | 사건 `"input"` 직후 구간 `"reveal"` |
-| 게임 상태 | 구간 `"win-check"` |
+| 게임 상태 | 구간 `"win-check"` (승리·패배 모두. 칸 열기 `"reveal"`과 분리 — 11-11 결정) |
 | 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반 |
 
 ## 2. 판정(alert) 로그 형식
@@ -52,17 +52,40 @@
 주입기가 변조 1건마다 JSONL 1줄을 남긴다. 평가 도구가 "실제로 무엇을 언제 변조했는지"의 **정답**으로 쓴다.
 
 ```json
-{"inject_ns":120300000,"name":"mine_field","method":"proc","scenario":"S1-immutable","from":"0x2222222222222222","to":"0xdeadbeefcafebabe","hidden":false}
+{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"S1-immutable","from":"0x2222222222222222","to":"0xdeadbeefcafebabe","hidden":false}
 ```
 
 | 필드 | 뜻 |
 |---|---|
 | `inject_ns` | 변조 시각 (CLOCK_MONOTONIC) |
 | `name` | 변조한 변수 이름 (감시 이름과 동일 키) |
+| `addr` | 실제로 쓴 주소(16진수 문자열). 주소 로그(§3.1)의 어느 수명 구간을 노렸는지 대조용 (11-11 추가) |
 | `method` | `"internal"` \| `"vm"` \| `"proc"` \| `"ptrace"` (S1-11 경로) |
 | `scenario` | 시나리오 식별자 (주입기 3종 라벨) |
 | `from` / `to` | 변조 전/후 값, 비스칼라면 `null` |
 | `hidden` | 은닉형(정상 패턴 흉내) 여부. `true`면 탐지율 목표에서 제외하고 한계로 집계 |
+
+## 3.1 주소 로그 형식 (게임 T1 출력, 11-11 추가)
+
+감시 메모리는 재할당될 수 있다(지뢰찾기는 판마다 `GameState`를 새로 할당). 게임은 테스트 옵션 `--addr-log <파일>`을 주면 수명 지점마다 JSONL 1줄을 남기고, 주입기는 이 로그로 대상 주소를 정한다. 메모리 스캔은 하지 않는다.
+
+```json
+{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"mine_field","offset":8,"size":480}]}
+{"ns":125000000,"event":"state_free","addr":"0x55d0c3a1e2a0"}
+```
+
+| 필드 | 뜻 |
+|---|---|
+| `ns` | 기록 시각 (CLOCK_MONOTONIC) |
+| `event` | `"state_alloc"` \| `"state_free"` |
+| `addr` / `size` | 상태 구조체 시작 주소·전체 크기 |
+| `fields[]` | 감시 변수별 `name`(규칙 파일·감시 이름과 같은 키)·`offset`·`size`. `state_alloc`에만 |
+
+**순서 보장** (게임이 지킨다)
+- 생성: 감시 변수마다 `mtd_watch` 완료 → `state_alloc` 기록. 주입기가 주소를 알 때는 이미 감시 중이다.
+- 해제: `state_free` 기록 → 감시 변수마다 `mtd_unwatch` → 메모리 해제.
+
+**주입기 규칙**: 가장 최근 `state_alloc`의 `addr + offset`에 쓴다. 그 `addr`의 `state_free`를 본 뒤에는 그 주소에 쓰지 않는다.
 
 ## 4. 채점 규칙 (평가 도구 T3)
 
@@ -76,6 +99,7 @@
   - 오탐률 = FP / 전체 판정 수  — 목표 ≤ 1%
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
+- **해제된 주소 변조 제외 (11-11 추가)**: 라벨의 `addr`가 속한 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`) 밖에서 들어간 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다.
 
 ## 5. v0에서 바뀐 점 (plan.md §2 초안 대비)
 PoC(섀도 주력) 반영:
@@ -83,6 +107,10 @@ PoC(섀도 주력) 반영:
 - `mtd_alloc` 필수 → **선택**(섀도만 쓰면 불필요)
 - `mtd_alert`에 **`kind`(behavior/prediction)** 추가 → 채점에서 행위/예측 분리 집계
 - 이벤트 외에 **구간(tag)** 을 1급 개념으로 명시
+
+11-11 PM 결정 반영 (`docs/monitoring-design.md` §8, 우진·전유정 확인 대기):
+- 정답 라벨에 `addr` 추가, 주소 로그(§3.1) 신설, 채점에 해제된 주소 변조 제외 규칙 추가
+- 게임 상태의 `win-check` 구간이 패배 전환도 포함
 
 ## 6. 열린 질문 (11-11 확정)
 - [ ] 탐지 윈도우 W(200ms)를 검사 주기와 연동할지 고정할지

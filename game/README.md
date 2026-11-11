@@ -22,9 +22,14 @@ cmake --build build -j
 
 ## 후속 작업 (PR #10 리뷰에서 나온 것)
 
-- **libmtd 연동**: 판마다 `GameState`를 새로 할당하므로, 감시 해제 API가 생기면
-  `Game` 소멸자에서 해제해야 한다. API 결정은 `docs/monitoring-design.md` §8.
-- **`lost` 전환 태그**: 규칙과 코드가 어긋남. `docs/rules-format.md` 열린 질문 참고.
+- **상태 수명 지점(11-11 결정)**: 판마다 `GameState`를 새로 할당하는 구조는 유지한다.
+  생성 직후·해제 직전 한 곳에서 같은 주소 정보를 libmtd와 주입기 양쪽에 넘긴다.
+  - 생성 직후: 감시 변수 6개 `mtd_watch` → `--addr-log`에 `state_alloc` 기록
+  - 해제 직전: `state_free` 기록 → `mtd_unwatch` 6개 → 메모리 해제
+  - 로그 형식·순서는 `docs/interface.md` §3.1, API는 `docs/monitoring-design.md` §3·§8.
+- **승패 판정 구간 분리(11-11 결정)**: 지금은 `open()` 안에서 `lost`를 대입한다.
+  칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 나눈다
+  (`docs/rules-format.md`).
 - **정상 동작 데이터 수집 시 봇 속도**: `--speed-ms 0`이면 한 판이 1초 안에 끝나
   `timer`가 한 번도 오르지 않는다(10분 실행 시 `timer=0s`). 오탐률 측정용 실행은
   한 판이 수 초 이상 이어지도록 `--speed-ms`를 준다.

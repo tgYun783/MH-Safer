@@ -76,6 +76,8 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 - [ ] required_event의 정확한 의미론: 구간(tag) 게이트인가, 비동기 검사 경로의 수용 조건인가, 둘 다인가 — monitoring-design §4 의사코드(needs_event/recent_event)와 맞물림.
 - [ ] event_window_ms를 검사 주기 T(mtd_config.period_ms)와 연동할지 고정할지 — interface.md §6 W 연동 질문과 같은 축.
 - [ ] 자료형·크기·enum 코드값은 전부 힌트일 뿐 미정: T1 게임 구조체 확정 후 size/signed/enum.codes/count 채워야 함.
+  - PR #10에서 구현값을 `game/rules.json`에 반영함(timer `uint32`, game_state 코드 `[0,1,2]`, 배열은 `uint8` 최대 30×16칸). 11-11에 확정할 것.
+- [ ] game_state의 `lost` 전환 태그: 구현(PR #10)에서는 지뢰를 연 `open()` 안, 즉 `reveal` 구간에서 `lost`로 바뀌는데 규칙은 `win-check` 태그만 허용 → libmtd 연동 시 오탐. 규칙에 `reveal` 허용을 추가할지, 게임 코드에서 승패 판정을 `win-check` 구간으로 분리할지.
 - [ ] 변수 이름 키 표준(snake_case English) 합의 — interface.md 예시(mine_field)를 따랐으나 6개 전체 네이밍은 미합의.
 
 ## 미정 요약

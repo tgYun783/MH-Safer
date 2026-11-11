@@ -32,7 +32,7 @@
       "value": {
         "type": "array", "element_size": 1, "count": null, "scalar": false, "compare": "bytes",
         "encoding": "uint",
-        "note": "첫 안전 클릭에서 한 번 배치된 뒤 불변. uint8_t 배열, 지뢰=1. 감시는 배치 후 시작하거나 최초 배치 변경을 초기화로 취급해야 함."
+        "note": "첫 안전 클릭에서 한 번 배치된 뒤 불변. uint8_t 배열, 지뢰=1. 감시는 배치 직후 시작(11-11 결정, interface.md §3.1 field_watch)."
       },
       "behavior": {
         "mutable": false,

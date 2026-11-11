@@ -58,7 +58,7 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 ## 변수별 규칙과 근거 (6종)
 - timer: tag "tick" 안 +1만. 1초마다 +1(plan.md §1) → delta_eq 1. 구간 밖 변화/+1 아님 탐지.
 - mines_remaining: tag "flag" 안 ±1만. 깃발 꽂기 -1·빼기 +1(plan.md §1) → delta_in [-1,1].
-- mine_field: 첫 클릭 후 불변(interface.md §1 "구간 없음", plan.md §1) → mutable=false + immutable. 배열이라 compare=bytes.
+- mine_field: 첫 클릭 후 불변(interface.md §1 "구간 없음", plan.md §1) → mutable=false + immutable. 배열이라 compare=bytes. 감시는 지뢰 배치 직후 시작(11-11 결정, interface.md §3.1 `field_watch`)이라 배치 자체는 위반이 아니다.
 - cell_state: 사건 "input" 직후 tag "reveal" 안에서만, 열린 칸 안 닫힘(plan.md §1) → required_event=input + per_element_monotonic(open_only). 배열.
 - cells_opened: input 직후 reveal 안, 단조 증가(plan.md §1) → monotonic non_decreasing. cell_state와 짝.
 - game_state: tag "win-check" 안에서만 상태 변경(interface.md §1, 승리·패배 모두. 게임은 칸 열기와 승패 대입을 다른 구간으로 분리 — 11-11 결정) → enum_transition. 승리 정당성은 변수 간 일관성이라 별도(아래 열린 질문).

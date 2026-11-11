@@ -23,9 +23,10 @@ cmake --build build -j
 ## 후속 작업 (PR #10 리뷰에서 나온 것)
 
 - **상태 수명 지점(11-11 결정)**: 판마다 `GameState`를 새로 할당하는 구조는 유지한다.
-  생성 직후·해제 직전 한 곳에서 같은 주소 정보를 libmtd와 주입기 양쪽에 넘긴다.
-  - 생성 직후: 감시 변수 6개 `mtd_watch` → `--addr-log`에 `state_alloc` 기록
-  - 해제 직전: `state_free` 기록 → `mtd_unwatch` 6개 → 메모리 해제
+  수명 지점(생성 직후·지뢰 배치 직후·해제 직전)마다 같은 주소 정보를 libmtd와 주입기 양쪽에 넘긴다.
+  - 생성 직후: `mine_field`를 뺀 5개 `mtd_watch` → `--addr-log`에 `state_alloc` 기록
+  - 지뢰 배치 직후(첫 클릭): `mine_field` `mtd_watch` → `field_watch` 기록
+  - 해제 직전: `state_free` 기록 → 감시 중인 변수 `mtd_unwatch` → 메모리 해제
   - 로그 형식·순서는 `docs/interface.md` §3.1, API는 `docs/monitoring-design.md` §3·§8.
 - **승패 판정 구간 분리(11-11 결정)**: 지금은 `open()` 안에서 `lost`를 대입한다.
   칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 나눈다

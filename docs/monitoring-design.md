@@ -44,51 +44,54 @@ PoC로 확인된 사실 (`docs/poc/write-paths.md`):
 | `mtd_end` (동기) | 합법 구간 닫을 때 | 변화가 규칙에 맞나 | 예측 기반 (값) |
 | 검사 스레드 (비동기, 주기 T) | 구간 밖 | 실제값 == 섀도인가 | 행위 기반 (타이밍) |
 
-## 3. 공개 API (mtd.h v1 초안)
+## 3. 공개 API (mtd.h v1)
 
 `extern "C"`, 경계 밖으로 예외·STL 금지 (`docs/plan.md` §2 이식성 원칙).
+**기준은 `libmtd/include/mtd.h`다.** v1 = v0 시그니처 + 11-11에 확정한 `mtd_unwatch`·`mtd_free`. 이 절과 헤더가 다르면 헤더가 맞다.
 
 ```c
-/* 초기화 / 종료 */
-int   mtd_init(const char *rules_path, mtd_alert_cb on_alert, const mtd_config *cfg);
+#define MTD_OK   0
+#define MTD_ERR (-1)
+#define MTD_DEFAULT_PERIOD_MS 50u
+
+typedef enum { MTD_KIND_BEHAVIOR = 0, MTD_KIND_PREDICTION = 1 } mtd_kind;
+
+/* 탐지 알림 1건. 문자열 포인터는 콜백 반환 전까지만 유효 */
+typedef struct {
+    const char *name;      /* 감시 변수 이름 */
+    mtd_kind    kind;      /* behavior | prediction */
+    const char *rule;      /* 위반한 규칙/태그 식별자, 없으면 NULL */
+    uint64_t    expected;  /* 기대값(섀도). 스칼라(≤8바이트)가 아니면 0 */
+    uint64_t    actual;    /* 실제값. 스칼라가 아니면 0 */
+    uint64_t    detect_ns; /* CLOCK_MONOTONIC */
+} mtd_alert;
+
+typedef void (*mtd_alert_cb)(const mtd_alert *alert, void *user);  /* 검사 스레드 문맥 */
+
+typedef struct {
+    unsigned     period_ms;       /* 검사 주기 T. 0이면 기본 50ms */
+    int          enable_mprotect; /* 보조 백엔드 on/off. 기본 0 */
+    mtd_alert_cb on_alert;        /* NULL이면 로그만 */
+    void        *user;            /* 콜백에 그대로 전달 */
+} mtd_config;
+
+/* 생애주기 */
+int   mtd_init(const char *rules_path, const mtd_config *cfg);
 void  mtd_shutdown(void);
 
-/* 감시 전용 페이지에 변수 배치 (mprotect 보조 백엔드용; 섀도만 쓰면 선택) */
-void *mtd_alloc(size_t size);
-
-/* 감시 등록: 등록 시 섀도 = 현재 실제값 */
-int   mtd_watch(void *addr, size_t size, const char *name);
-
-/* 감시 해제 (11-11 결정): 반환 후 검사 스레드는 addr를 더 읽지 않는다(락으로 동기화).
-   감시 메모리를 해제하기 전에 반드시 호출. 등록 안 된 주소면 MTD_ERR. */
-int   mtd_unwatch(void *addr);
-
-/* mtd_alloc 영역 반환 (11-11 결정). 그 안의 감시는 먼저 mtd_unwatch할 것. */
-void  mtd_free(void *p);
+/* 감시 */
+void *mtd_alloc(size_t size);       /* (선택) 보조 백엔드용 감시 전용 페이지 */
+void  mtd_free(void *p);            /* 11-11 추가: mtd_alloc 영역 반환. 그 안의 감시는 먼저 mtd_unwatch */
+int   mtd_watch(void *addr, size_t size, const char *name);  /* 등록 시 섀도 = 현재값 */
+int   mtd_unwatch(void *addr);      /* 11-11 추가: 반환 후 검사 스레드는 addr를 더 읽지 않음(락 동기화).
+                                       감시 메모리 해제 전 반드시 호출. 미등록 주소면 MTD_ERR */
 
 /* 합법 변경 구간 (RAII 래퍼는 mtd.hpp의 mtd::Scope) */
 void  mtd_begin(const char *tag);   /* 이 구간 안 변화는 '합법' */
 void  mtd_end(void);                /* 규칙 검사 후 섀도 동기화 */
 
-/* 행위 판단용 사건 통지 (예: "input" 직후에만 칸 상태가 바뀔 수 있음) */
+/* 행위 판단용 사건 통지 */
 void  mtd_event(const char *name);
-
-/* 알림 콜백 */
-typedef void (*mtd_alert_cb)(const mtd_alert *a);
-
-typedef struct {
-    const char *name;        /* 감시 변수 이름 */
-    const char *kind;        /* "behavior" | "prediction" */
-    const char *detail;      /* 위반 요약 (규칙 id 등) */
-    uint64_t    shadow;      /* 기대값(섀도) */
-    uint64_t    actual;      /* 실제값 */
-    uint64_t    detect_ns;   /* CLOCK_MONOTONIC */
-} mtd_alert;
-
-typedef struct {
-    unsigned period_ms;      /* 검사 주기 T. 기본 50ms (period-sweep.md로 확정) */
-    int      enable_mprotect;/* 보조 백엔드 on/off. 기본 0 */
-} mtd_config;
 ```
 
 **설계 메모**
@@ -126,7 +129,7 @@ mtd_end():
 | 변수 | 합법 변경 | 탐지 방식 |
 |---|---|---|
 | 타이머 | `tick` 구간 안 +1 | 구간 밖 변화 = 행위 / +1 아님 = 예측 |
-| 지뢰 배치 | 첫 클릭 후 불변 (구간 없음) | **어떤 변화든 행위 위반** (섀도 고정) |
+| 지뢰 배치 | 첫 클릭 후 불변 (구간 없음). **배치 직후부터 감시**(11-11 결정) — 배치 전 0 → 배치값 변화는 감시 밖 | **어떤 변화든 행위 위반** (섀도 고정) |
 | 칸 상태 | `input` 사건 직후만 | 사건 없이 변화 = 행위 |
 | 남은 지뢰 | 깃발 구간 안 ±1 | 구간 밖 = 행위 / ±1 아님 = 예측 |
 | 열린 칸 수 | 칸 여는 구간 안, 단조 증가 | 구간 밖 / 감소 = 위반 |
@@ -156,6 +159,7 @@ mtd_end():
 - [x] 콜백 재알림 억제(ack) → **라이브러리가 처리**. alert 직후 섀도 = 실제값(§4 의사코드). 변화 1건당 alert 1건이라 채점이 단순하고 알림 폭주가 없다.
 - [x] 감시 대상 생애주기 → **주소 기반 `mtd_unwatch(addr)` + `mtd_free(p)` 추가**(§3). 근거: T1 게임(PR #10)은 판마다 `GameState`를 새로 할당·해제한다(봇 10분 실행 ≈ 3,470만 판, 2026-11-11 측정). 해제 API가 없으면 ① 해제된 주소 검사(오탐·정의되지 않은 동작) ② 감시 테이블 무한 증가 ③ `mtd_alloc` 누수. 실제 프로그램도 객체를 재할당하므로 게임에서 주소를 고정하지 않고 **라이브러리가 대응**한다.
 - [x] 주입기(T2)의 대상 주소 확보 → **게임이 주소를 통지**(메모리 스캔은 구현하지 않음). 게임은 `GameState` 수명 지점 한 곳에서 같은 주소 정보를 **libmtd와 주입기 양쪽**에 넘긴다:
-  - 생성 직후: 감시 변수마다 `mtd_watch` → 주소 로그에 `state_alloc` 기록
-  - 해제 직전: 주소 로그에 `state_free` 기록 → 감시 변수마다 `mtd_unwatch` → 메모리 해제
+  - 생성 직후: `mine_field`를 뺀 감시 변수 5개 `mtd_watch` → 주소 로그에 `state_alloc` 기록
+  - 지뢰 배치 직후(첫 클릭): `mine_field` `mtd_watch` → 주소 로그에 `field_watch` 기록. 첫 클릭의 배치 변화가 불변 위반 오탐이 되지 않게 한다
+  - 해제 직전: 주소 로그에 `state_free` 기록 → 감시 중인 변수마다 `mtd_unwatch` → 메모리 해제
   - 주소 로그 형식과 채점 규칙은 `docs/interface.md` §3.1·§4.

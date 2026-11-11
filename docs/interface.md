@@ -29,7 +29,7 @@
 | 남은 지뢰 | 구간 `"flag"` |
 | 칸 상태 / 열린 칸 수 | 사건 `"input"` 직후 구간 `"reveal"` |
 | 게임 상태 | 구간 `"win-check"` (승리·패배 모두. 칸 열기 `"reveal"`과 분리 — 11-11 결정) |
-| 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반 |
+| 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반. 감시는 지뢰 배치 직후부터(§3.1 `field_watch`) |
 
 ## 2. 판정(alert) 로그 형식
 
@@ -70,22 +70,24 @@
 감시 메모리는 재할당될 수 있다(지뢰찾기는 판마다 `GameState`를 새로 할당). 게임은 테스트 옵션 `--addr-log <파일>`을 주면 수명 지점마다 JSONL 1줄을 남기고, 주입기는 이 로그로 대상 주소를 정한다. 메모리 스캔은 하지 않는다.
 
 ```json
-{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"mine_field","offset":8,"size":480}]}
+{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"cell_state","offset":488,"size":480},{"name":"cells_opened","offset":968,"size":4},{"name":"game_state","offset":972,"size":4}]}
+{"ns":121500000,"event":"field_watch","addr":"0x55d0c3a1e2a0","fields":[{"name":"mine_field","offset":8,"size":480}]}
 {"ns":125000000,"event":"state_free","addr":"0x55d0c3a1e2a0"}
 ```
 
 | 필드 | 뜻 |
 |---|---|
 | `ns` | 기록 시각 (CLOCK_MONOTONIC) |
-| `event` | `"state_alloc"` \| `"state_free"` |
+| `event` | `"state_alloc"` \| `"field_watch"` \| `"state_free"` |
 | `addr` / `size` | 상태 구조체 시작 주소·전체 크기 |
-| `fields[]` | 감시 변수별 `name`(규칙 파일·감시 이름과 같은 키)·`offset`·`size`. `state_alloc`에만 |
+| `fields[]` | 이 시점에 감시를 시작한 변수별 `name`(규칙 파일·감시 이름과 같은 키)·`offset`·`size`. `state_alloc`·`field_watch`에만 |
 
 **순서 보장** (게임이 지킨다)
-- 생성: 감시 변수마다 `mtd_watch` 완료 → `state_alloc` 기록. 주입기가 주소를 알 때는 이미 감시 중이다.
-- 해제: `state_free` 기록 → 감시 변수마다 `mtd_unwatch` → 메모리 해제.
+- 생성: `mine_field`를 뺀 감시 변수마다 `mtd_watch` 완료 → `state_alloc` 기록. 주입기가 주소를 알 때는 이미 감시 중이다.
+- 지뢰 배치(첫 클릭): 배치 완료 → `mine_field` `mtd_watch` → `field_watch` 기록. 배치 전에는 `mine_field`가 감시 대상이 아니다(11-11 결정).
+- 해제: `state_free` 기록 → 감시 중인 변수마다 `mtd_unwatch` → 메모리 해제.
 
-**주입기 규칙**: 가장 최근 `state_alloc`의 `addr + offset`에 쓴다. 그 `addr`의 `state_free`를 본 뒤에는 그 주소에 쓰지 않는다.
+**주입기 규칙**: 가장 최근 `state_alloc`의 `addr`에, `state_alloc`·`field_watch`로 알려진 변수의 `offset`을 더해 쓴다. 아직 알려지지 않은 변수(배치 전 `mine_field`)에는 쓰지 않는다. 그 `addr`의 `state_free`를 본 뒤에는 그 주소에 쓰지 않는다.
 
 ## 4. 채점 규칙 (평가 도구 T3)
 
@@ -99,7 +101,7 @@
   - 오탐률 = FP / 전체 판정 수  — 목표 ≤ 1%
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
-- **해제된 주소 변조 제외 (11-11 추가)**: 라벨의 `addr`가 속한 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`) 밖에서 들어간 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다.
+- **해제된 주소 변조 제외 (11-11 추가)**: 라벨의 `addr`가 속한 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`) 밖에서 들어간 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다. 해당 변수의 감시 시작(`state_alloc` 또는 `field_watch`) 전에 들어간 변조도 같은 방식으로 뺀다.
 
 ## 5. v0에서 바뀐 점 (plan.md §2 초안 대비)
 PoC(섀도 주력) 반영:
@@ -109,7 +111,8 @@ PoC(섀도 주력) 반영:
 - 이벤트 외에 **구간(tag)** 을 1급 개념으로 명시
 
 11-11 `mtd.h` v1 확정 반영 (`docs/monitoring-design.md` §8):
-- 정답 라벨에 `addr` 추가, 주소 로그(§3.1) 신설, 채점에 해제된 주소 변조 제외 규칙 추가
+- 정답 라벨에 `addr` 추가, 주소 로그(§3.1) 신설, 채점에 감시 밖(해제 후·감시 시작 전) 변조 제외 규칙 추가
+- 지뢰 배치는 배치 직후부터 감시(`field_watch`)
 - 게임 상태의 `win-check` 구간이 패배 전환도 포함
 
 ## 6. 열린 질문 (11-11 확정)

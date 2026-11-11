@@ -23,7 +23,7 @@
 | S2-03 | 하네스 훅: C++ 파일 수정 후 해당 모듈 빌드 자동 실행 (S1-08 이월). Codex에 같은 훅이 없으면 git pre-commit 훅으로 빌드 검사(`docs/roles.md` 도구 중립 원칙) | 필수 | 2h | Claude Code에서 C++ 파일 수정 시 빌드가 자동으로 돌고 실패가 대화에 보임, Codex는 훅 또는 pre-commit으로 빌드 실패가 드러남 |
 | S2-04 | 스킬: 기존 `scripts/dev.sh build`(S1-02, Docker 빌드+테스트)를 부르는 빌드·테스트 스킬. 스크립트는 새로 만들지 않음 | 필수 | 1h | 새 세션에서 "빌드하고 테스트 돌려줘"로 `scripts/dev.sh build`가 실행되고 ctest 결과가 보임 |
 | S2-05 | 실험 프로토콜 `docs/experiment.md`: 정상 플레이 측정 조건(난이도·시드·봇 속도·시간), 주입 시나리오 3종 정의, 반복 횟수, 채점 윈도우, 실행 환경 | 필수 | 3h | 우진·전유정 리뷰 승인, S3 첫 채점(11-20)에 수정 없이 쓸 수 있음 |
-| S2-06 | 기본 통합(11-13~): 게임에 libmtd 링크, 상태 수명 지점(S2-23)에서 `mtd_watch`/`mtd_unwatch`(`mine_field`는 배치 직후 — `docs/interface.md` §3.1), `tick`·`flag`·`reveal`·`win-check` 구간과 `input` 사건 표시 | 필수 | 4h | 게임이 libmtd에 링크돼 CI 통과, 봇 10분 실행 크래시 0, `mtd_test_watch_count()`가 판마다 배치 전 5·배치 후 6을 넘지 않음, 정상 플레이 첫 클릭에 `mine_field` alert 0 |
+| S2-06 | 기본 통합(11-13~): 게임에 libmtd 링크, 상태 수명 지점(S2-23)에서 `mtd_watch`/`mtd_unwatch`(`mine_field`는 배치 직후 — `docs/interface.md` §3.1), `tick`·`flag`·`reveal`·`win-check` 구간과 `input` 사건 표시 | 필수 | 4h | 게임이 libmtd에 링크돼 CI 통과, 봇 10분 실행 크래시 0, `mtd_test_watch_count()`가 판마다 배치 전 5·배치 후 6을 넘지 않음, 정상 플레이 첫 클릭에 `mine_field` alert 0 (alert 항목은 S2-12 병합 후 확인) |
 | S2-07 | 협업 규칙 마무리 (S1-07 이월): 이슈 템플릿, Projects 보드에 S2 항목 등록, `main` 보호에 CI 필수 체크 추가 | 필수 | 1h | 이슈 템플릿 존재, 보드에 S2 전 항목, CI 실패 PR은 병합 버튼 비활성 |
 | S2-08 | `third_party/`에 nlohmann/json 단일 헤더 벤더링 (`SYSTEM` include) | 필수 | 1h | 11-12까지 `main` 병합, `#include <nlohmann/json.hpp>`로 빌드 통과 |
 
@@ -53,13 +53,13 @@
 
 ## 순서와 의존 관계
 - **11-12 (목)까지**: S2-08 JSON 벤더링(S2-21·S2-23 선행), S2-13 내부 규칙 조회 인터페이스(S2-12·S2-21·S2-22 선행)
-- **11-13 (금)까지**: S2-11 엔진 코어, S2-23 게임 수명 지점 → S2-06 기본 통합 시작
+- **11-13 (금)까지**: S2-11 엔진 코어, S2-23 게임 수명 지점 → S2-06 기본 통합 시작. S2-06의 alert 관련 완료 기준은 S2-12(행위 탐지) 병합 뒤 확인
 - S2-12·S2-22는 S2-13 인터페이스로 서로를 가짜 구현(stub)으로 대체해 병렬 개발. S2-22의 `per_element_monotonic`은 S2-11 배열 섀도가 필요하고, 그 전에는 S2-13 stub으로 개발
 - S2-05 실험 프로토콜은 S3 첫 채점(11-20)과 정상 로그 수집의 기준. 11-15까지
 
 ## 다음 스프린트로 넘기는 것 (S3 예정, `docs/plan.md` §4)
 - 주입기 3종 최소 버전(11-18): `--addr-log`를 따라 대상 주소를 갈아타고 정답 라벨에 `addr` 기록(`docs/interface.md` §3·§3.1)
-- 최소 채점기(11-18): 해제된 주소 변조는 "stale"로 제외(`docs/interface.md` §4)
+- 최소 채점기(11-18): 감시 밖 변조(해제 후·감시 시작 전)는 "stale"로 제외(`docs/interface.md` §4)
 - 판정 결합, 정상 로그 수집, 통합·첫 채점(11-20)
 - 변수 간 일관성 검사(L4 필수 범위, `docs/plan.md` §2): `game_state` 승리 ⇔ `cells_opened` = 안전 칸 수. S2-24 스키마 초안을 바탕으로 구현
 

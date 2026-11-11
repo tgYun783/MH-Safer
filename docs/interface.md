@@ -3,8 +3,8 @@
 **상태** v0 초안 · 2026-11-09 · **확정** 11-11 (`mtd.h` v1과 함께)
 **짝 문서** `libmtd/include/mtd.h` (공개 API), `docs/monitoring-design.md` (감시 엔진 설계)
 
-모듈 3개(감시 라이브러리 L·게임 T1·주입기 T2·평가 T3)가 공유하는 데이터 형식을 정의한다.
-여기서 정하는 건 **① 이벤트/구간**, **② 판정(alert) 로그**, **③ 정답 라벨**, 그리고 셋을 잇는 **채점 규칙**이다.
+모듈 4개(감시 라이브러리 L·게임 T1·주입기 T2·평가 T3)가 공유하는 데이터 형식을 정의한다.
+여기서 정하는 건 **① 이벤트/구간**, **② 판정(alert) 로그**, **③ 정답 라벨**(+ 주소 로그 §3.1), 그리고 셋을 잇는 **채점 규칙**이다.
 규칙 파일(`rules.json`) 내부 구조는 S1-05에서 별도로 정한다(여기선 참조만).
 
 ## 공통 규약
@@ -36,7 +36,7 @@
 `mtd_alert`(mtd.h) 1건 = JSONL 1줄.
 
 ```json
-{"detect_ns":120345678,"name":"mine_field","kind":"behavior","rule":"immutable","expected":"0x2222222222222222","actual":"0xdeadbeefcafebabe"}
+{"detect_ns":120345678,"name":"mine_field","kind":"behavior","rule":"immutable","expected":null,"actual":null}
 ```
 
 | 필드 | 뜻 |
@@ -52,7 +52,7 @@
 주입기가 변조 1건마다 JSONL 1줄을 남긴다. 평가 도구가 "실제로 무엇을 언제 변조했는지"의 **정답**으로 쓴다.
 
 ```json
-{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"S1-immutable","from":"0x2222222222222222","to":"0xdeadbeefcafebabe","hidden":false}
+{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"S1-immutable","from":null,"to":null,"hidden":false}
 ```
 
 | 필드 | 뜻 |
@@ -71,7 +71,7 @@
 
 ```json
 {"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"cell_state","offset":488,"size":480},{"name":"cells_opened","offset":968,"size":4},{"name":"game_state","offset":972,"size":4}]}
-{"ns":121500000,"event":"field_watch","addr":"0x55d0c3a1e2a0","fields":[{"name":"mine_field","offset":8,"size":480}]}
+{"ns":120100000,"event":"field_watch","addr":"0x55d0c3a1e2a0","fields":[{"name":"mine_field","offset":8,"size":480}]}
 {"ns":125000000,"event":"state_free","addr":"0x55d0c3a1e2a0"}
 ```
 
@@ -101,7 +101,7 @@
   - 오탐률 = FP / 전체 판정 수  — 목표 ≤ 1%
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
-- **해제된 주소 변조 제외 (11-11 추가)**: 라벨의 `addr`가 속한 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`) 밖에서 들어간 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다. 해당 변수의 감시 시작(`state_alloc` 또는 `field_watch`) 전에 들어간 변조도 같은 방식으로 뺀다.
+- **감시 밖 변조 제외 (11-11 추가)**: 라벨의 `addr`가 `[state_alloc.addr, state_alloc.addr + size)` 안에 드는 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`)을 찾는다. 그 구간이 끝난 뒤의 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다. 해당 변수의 감시 시작(`state_alloc` 또는 `field_watch`) 전에 들어간 변조도 같은 방식으로 뺀다.
 
 ## 5. v0에서 바뀐 점 (plan.md §2 초안 대비)
 PoC(섀도 주력) 반영:

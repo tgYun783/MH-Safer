@@ -30,7 +30,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - signed, encoding("int"|"uint"|"enum")
 - compare: "value"(스칼라 직접 비교) | "bytes"(비스칼라 바이트 비교, 11-11 결정. 해시는 alert 표현용으로만)
 - scalar=false인 비스칼라는 alert의 expected/actual이 null(interface.md §공통규약·§2)
-- enum.codes=null은 상태 코드값 미정(게임 미구현)
+- enum.codes: 상태 코드값. 지뢰찾기는 `[0,1,2]`(11-11 승인)
 
 ### behavior (행위 기반)
 | 필드 | 뜻 |
@@ -69,7 +69,7 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 - immutable을 behavior(mutable=false)와 prediction(immutable) 양쪽에 둠: mine_field는 "구간 없음+값 불변"이 모두 참이라 두 탐지 경로에서 다 위반으로 잡히게 함.
 - required_event를 "구간 유효 조건"으로 해석(input 없는 reveal 자체가 행위 위반): interface.md §1 "input 직후 reveal" 문구 반영.
 
-## 11-11 확정 전 열린 질문 (전유정 S1-24와 조율)
+## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
 - [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6)
 - [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4)

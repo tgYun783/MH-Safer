@@ -1,11 +1,10 @@
-# 감시 엔진 설계 (mtd.h v1 근거) — 초안
+# 감시 엔진 설계 (mtd.h v1 근거)
 
-**상태** 초안 · 2026-11-09 작성 · **확정 예정** 2026-11-11 (`mtd.h` v1)
+**상태** 2026-11-09 작성 · **확정** 2026-11-11 (`mtd.h` v1, §8)
 **근거** `docs/poc/write-paths.md` (S1-10/11/12 실측)
 **관련** `docs/plan.md` §2, `docs/sprints/sprint-1.md`
 
-> 이 문서는 S1 PoC 결과를 바탕으로 감시 엔진의 구조와 공개 API를 확정하기 위한 초안이다.
-> `[결정 필요]` 표시는 11-11 회의에서 정한다.
+> 이 문서는 S1 PoC 결과를 바탕으로 감시 엔진의 구조와 공개 API를 정한다. 11-11 결정 사항은 §8.
 
 ## 1. 결정 요약
 
@@ -44,49 +43,60 @@ PoC로 확인된 사실 (`docs/poc/write-paths.md`):
 | `mtd_end` (동기) | 합법 구간 닫을 때 | 변화가 규칙에 맞나 | 예측 기반 (값) |
 | 검사 스레드 (비동기, 주기 T) | 구간 밖 | 실제값 == 섀도인가 | 행위 기반 (타이밍) |
 
-## 3. 공개 API (mtd.h v1 초안)
+## 3. 공개 API (mtd.h v1)
 
 `extern "C"`, 경계 밖으로 예외·STL 금지 (`docs/plan.md` §2 이식성 원칙).
+**기준은 `libmtd/include/mtd.h`다.** v1 = v0 시그니처 + 11-11에 확정한 `mtd_unwatch`·`mtd_free`. 이 절과 헤더가 다르면 헤더가 맞다.
 
 ```c
-/* 초기화 / 종료 */
-int   mtd_init(const char *rules_path, mtd_alert_cb on_alert, const mtd_config *cfg);
+#define MTD_OK   0
+#define MTD_ERR (-1)
+#define MTD_DEFAULT_PERIOD_MS 50u
+
+typedef enum { MTD_KIND_BEHAVIOR = 0, MTD_KIND_PREDICTION = 1 } mtd_kind;
+
+/* 탐지 알림 1건. 문자열 포인터는 콜백 반환 전까지만 유효 */
+typedef struct {
+    const char *name;      /* 감시 변수 이름 */
+    mtd_kind    kind;      /* behavior | prediction */
+    const char *rule;      /* 위반한 규칙/태그 식별자, 없으면 NULL */
+    uint64_t    expected;  /* 기대값(섀도). 스칼라(≤8바이트)가 아니면 0 */
+    uint64_t    actual;    /* 실제값. 스칼라가 아니면 0 */
+    uint64_t    detect_ns; /* CLOCK_MONOTONIC */
+} mtd_alert;
+
+typedef void (*mtd_alert_cb)(const mtd_alert *alert, void *user);  /* 검사 스레드 문맥 */
+
+typedef struct {
+    unsigned     period_ms;       /* 검사 주기 T. 0이면 기본 50ms */
+    int          enable_mprotect; /* 보조 백엔드 on/off. 기본 0 */
+    mtd_alert_cb on_alert;        /* NULL이면 로그만 */
+    void        *user;            /* 콜백에 그대로 전달 */
+} mtd_config;
+
+/* 생애주기 */
+int   mtd_init(const char *rules_path, const mtd_config *cfg);
 void  mtd_shutdown(void);
 
-/* 감시 전용 페이지에 변수 배치 (mprotect 보조 백엔드용; 섀도만 쓰면 선택) */
-void *mtd_alloc(size_t size);
-
-/* 감시 등록: 등록 시 섀도 = 현재 실제값 */
-int   mtd_watch(void *addr, size_t size, const char *name);
+/* 감시 */
+void *mtd_alloc(size_t size);       /* (선택) 보조 백엔드용 감시 전용 페이지 */
+void  mtd_free(void *p);            /* 11-11 추가: mtd_alloc 영역 반환. 그 안의 감시는 먼저 mtd_unwatch */
+int   mtd_watch(void *addr, size_t size, const char *name);  /* 등록 시 섀도 = 현재값 */
+int   mtd_unwatch(void *addr);      /* 11-11 추가: 반환 후 검사 스레드는 addr를 더 읽지 않음(락 동기화).
+                                       감시 메모리 해제 전 반드시 호출. 미등록 주소면 MTD_ERR */
 
 /* 합법 변경 구간 (RAII 래퍼는 mtd.hpp의 mtd::Scope) */
 void  mtd_begin(const char *tag);   /* 이 구간 안 변화는 '합법' */
 void  mtd_end(void);                /* 규칙 검사 후 섀도 동기화 */
 
-/* 행위 판단용 사건 통지 (예: "input" 직후에만 칸 상태가 바뀔 수 있음) */
+/* 행위 판단용 사건 통지 */
 void  mtd_event(const char *name);
-
-/* 알림 콜백 */
-typedef void (*mtd_alert_cb)(const mtd_alert *a);
-
-typedef struct {
-    const char *name;        /* 감시 변수 이름 */
-    const char *kind;        /* "behavior" | "prediction" */
-    const char *detail;      /* 위반 요약 (규칙 id 등) */
-    uint64_t    shadow;      /* 기대값(섀도) */
-    uint64_t    actual;      /* 실제값 */
-    uint64_t    detect_ns;   /* CLOCK_MONOTONIC */
-} mtd_alert;
-
-typedef struct {
-    unsigned period_ms;      /* 검사 주기 T. 기본 50ms (period-sweep.md로 확정) */
-    int      enable_mprotect;/* 보조 백엔드 on/off. 기본 0 */
-} mtd_config;
 ```
 
 **설계 메모**
 - **검사 주기 T가 탐지 지연을 지배.** 주기 스윕(`docs/poc/period-sweep.md`) 결과 max 지연 ≈ T+5ms, CPU는 1000변수에도 0.06~0.21%로 무시 가능 → 제약은 지연. 목표 100ms를 2배 마진으로 지키는 **T = 50ms 확정**(max 54ms).
-- 변수 크기: v1은 `uint64_t` 이하 스칼라 우선. 지뢰 배치(배열)·칸 상태(배열)는 **블록 해시 비교** `[결정 필요]` (스냅샷 해시 vs 바이트 비교, T5 오버헤드에 영향).
+- 변수 크기: v1은 `uint64_t` 이하 스칼라 우선. 지뢰 배치(배열)·칸 상태(배열)는 **바이트 비교**(11-11 결정): 섀도에 배열 전체 사본을 두고 `memcmp`, 차이가 나면 요소별로 규칙 검사(`per_element_monotonic`). 해시는 alert의 `expected/actual` 표현이 필요할 때만 계산. 배열 검사 오버헤드는 미측정(S2에서 측정).
+- 감시 대상 수명(11-11 결정): 감시 메모리가 재할당되는 프로그램을 지원한다. 사용자는 해제 직전 `mtd_unwatch`, 새 영역 할당 직후 `mtd_watch`를 부른다. 지뢰찾기는 판마다 `GameState`를 새로 할당한다(PR #10).
 - 콜백은 검사 스레드에서 호출 → 사용자 콜백 안에서 무거운 작업 금지 (문서화).
 
 ## 4. 탐지 로직
@@ -118,17 +128,17 @@ mtd_end():
 | 변수 | 합법 변경 | 탐지 방식 |
 |---|---|---|
 | 타이머 | `tick` 구간 안 +1 | 구간 밖 변화 = 행위 / +1 아님 = 예측 |
-| 지뢰 배치 | 첫 클릭 후 불변 (구간 없음) | **어떤 변화든 행위 위반** (섀도 고정) |
-| 칸 상태 | `input` 사건 직후만 | 사건 없이 변화 = 행위 |
+| 지뢰 배치 | 첫 클릭 후 불변 (구간 없음). **배치 직후부터 감시**(11-11 결정) — 배치 전 0 → 배치값 변화는 감시 밖 | **어떤 변화든 행위 위반** (섀도 고정) |
+| 칸 상태 | `input` 사건 직후 `reveal` 구간 안 (`docs/interface.md` §1) | 사건 없이 변화 = 행위 / 열린 칸이 닫힘 = 예측 |
 | 남은 지뢰 | 깃발 구간 안 ±1 | 구간 밖 = 행위 / ±1 아님 = 예측 |
 | 열린 칸 수 | 칸 여는 구간 안, 단조 증가 | 구간 밖 / 감소 = 위반 |
-| 게임 상태 | 승리 판정 구간 안 | 구간 밖 '승리' = 행위 |
+| 게임 상태 | 승패 판정(`win-check`) 구간 안. 게임 코드는 칸 열기(`reveal`)와 승패 대입을 다른 구간으로 분리(11-11 결정) | 구간 밖 '승리'·'패배' = 행위 |
 
 ## 6. 플랫폼 격리 (Windows 고려)
 
 지원 플랫폼은 **Linux**(계획서 §머리말). Windows는 개발 시 Docker/VM으로 통일. 단, 코드는 아래로 분리해 포팅 비용을 낮춘다:
 - **주력(섀도·검사 스레드·규칙·콜백)**: 표준 C++17 + pthread → OS 중립.
-- **보조(mprotect 백엔드)**: `monitor/backend_mprotect_posix.c` 로 격리. Windows면 `VirtualProtect`+VEH로 대체 구현 가능하게 인터페이스만 공유.
+- **보조(mprotect 백엔드)**: `libmtd/src/backend_mprotect_posix.c` 로 격리. Windows면 `VirtualProtect`+VEH로 대체 구현 가능하게 인터페이스만 공유.
 - `mtd_alloc`도 백엔드 뒤로 (POSIX `mmap` / Windows `VirtualAlloc`).
 
 ## 7. 한계
@@ -137,10 +147,18 @@ mtd_end():
 - 섀도는 **값 변화**만 본다. 정상 범위의 값으로 바꾸고 타이밍도 합법 구간에 맞춘 변조는 못 잡음 → 한계로 측정·보고.
 - `ptrace` 변조는 대상을 멈춤 → 검사 스레드도 멈춤. 탐지는 재개 후 다음 주기. (지연 측정은 `/proc/mem` 기준)
 
-## 8. 11-11 확정 전 결정할 것
+## 8. 11-11 결정 사항
+
+> 11-11 `mtd.h` v1 확정. 아래 결정은 모두 확정 사항이다.
 
 - [x] 검사 주기 T 기본값 → **50ms 확정** (`docs/poc/period-sweep.md`: max 지연 54ms로 100ms 목표에 2배 마진, CPU 0.12%/1000변수로 무시 가능. 제약은 CPU가 아니라 지연, T≤75ms면 지연 목표 충족)
-- [ ] 배열형 변수(지뢰 배치·칸 상태) 비교 방식: 바이트 비교 vs 블록 해시
-- [ ] `mtd_alloc` 필수 여부 (섀도만 쓰면 보호 페이지 불필요 — 보조 백엔드 켤 때만 요구?)
-- [ ] 규칙 파일에 "변수-태그-사건" 매핑을 어떻게 표현할지 (전유정 S1-05와 맞물림)
-- [ ] 콜백 재알림 억제(ack) 정책을 라이브러리가 할지 사용자에게 맡길지
+- [x] 배열형 변수(지뢰 배치·칸 상태) 비교 방식 → **바이트 비교**. 해시도 전 바이트를 읽어야 해서 CPU 이득이 거의 없고, 칸 상태의 "열린 칸은 안 닫힘"(요소별 단방향) 규칙은 요소별 비교로만 검사 가능. 해시는 alert 표현용으로만. 오버헤드는 미측정(S2 측정).
+- [x] `mtd_alloc` 필수 여부 → **선택**. 섀도만 쓰면 일반 변수도 `mtd_watch` 가능. `enable_mprotect=1`일 때만 보조 백엔드가 `mtd_alloc` 영역을 요구하고, 그 밖의 변수는 보조 백엔드가 건너뛴다(`docs/interface.md` §5와 일치).
+- [x] 규칙 파일의 "변수-태그-사건" 매핑 표현 → **현행 변수 중심 유지**(변수마다 `behavior.allowed_in_tags`/`required_event`/`event_window_ms`). 검사 엔진의 변수 단위 검사와 1:1. `required_event` 의미론은 `docs/rules-format.md` 열린 질문으로 남김.
+- [x] 콜백 재알림 억제(ack) → **라이브러리가 처리**. alert 직후 섀도 = 실제값(§4 의사코드). 변화 1건당 alert 1건이라 채점이 단순하고 알림 폭주가 없다.
+- [x] 감시 대상 생애주기 → **주소 기반 `mtd_unwatch(addr)` + `mtd_free(p)` 추가**(§3). 근거: T1 게임(PR #10)은 판마다 `GameState`를 새로 할당·해제한다(봇 `--speed-ms 0`으로 10분 실행 ≈ 3,470만 판, 2026-11-11 측정). 해제 API가 없으면 ① 해제된 주소 검사(오탐·정의되지 않은 동작) ② 감시 테이블 무한 증가 ③ `mtd_alloc` 누수. 실제 프로그램도 객체를 재할당하므로 게임에서 주소를 고정하지 않고 **라이브러리가 대응**한다.
+- [x] 주입기(T2)의 대상 주소 확보 → **게임이 주소를 통지**(메모리 스캔은 구현하지 않음). 게임은 `GameState` 수명 지점(생성 직후·지뢰 배치 직후·해제 직전)마다 같은 주소 정보를 **libmtd와 주입기 양쪽**에 넘긴다:
+  - 생성 직후: `mine_field`를 뺀 감시 변수 5개 `mtd_watch` → 주소 로그에 `state_alloc` 기록
+  - 지뢰 배치 직후(첫 클릭): `mine_field` `mtd_watch` → 주소 로그에 `field_watch` 기록. 첫 클릭의 배치 변화가 불변 위반 오탐이 되지 않게 한다
+  - 해제 직전: 주소 로그에 `state_free` 기록 → 감시 중인 변수마다 `mtd_unwatch` → 메모리 해제
+  - 주소 로그 형식과 채점 규칙은 `docs/interface.md` §3.1·§4.

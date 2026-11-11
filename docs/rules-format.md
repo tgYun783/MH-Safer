@@ -1,6 +1,6 @@
 # 규칙 파일 형식 (rules.json, S1-05, v0)
 
-**상태** v0 초안 · 2026-11-09 · **확정** 11-11 (mtd.h v1 / interface.md v0와 함께)
+**상태** 스키마 v0 · 2026-11-09 작성 · **확정** 2026-11-11 (`mtd.h` v1 / `interface.md` v1과 함께) · 남은 열린 질문은 담당 스프린트에서 결정
 **짝 문서** `docs/interface.md`(형식 규격), `docs/monitoring-design.md`(탐지 엔진), `libmtd/include/mtd.h`
 **예시 파일** `game/rules.json` (지뢰찾기)
 
@@ -28,9 +28,9 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - type: "scalar" | "array"
 - size(스칼라, 바이트) / element_size·count(배열, count=null이면 런타임 결정)
 - signed, encoding("int"|"uint"|"enum")
-- compare: "value"(스칼라 직접 비교) | "hash"(비스칼라 블록 해시)
+- compare: "value"(스칼라 직접 비교) | "bytes"(비스칼라 바이트 비교, 11-11 결정. 해시는 alert 표현용으로만)
 - scalar=false인 비스칼라는 alert의 expected/actual이 null(interface.md §공통규약·§2)
-- enum.codes=null은 상태 코드값 미정(게임 미구현)
+- enum.codes: 상태 코드값. 지뢰찾기는 `[0,1,2]`(11-11 승인)
 
 ### behavior (행위 기반)
 | 필드 | 뜻 |
@@ -58,26 +58,27 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 ## 변수별 규칙과 근거 (6종)
 - timer: tag "tick" 안 +1만. 1초마다 +1(plan.md §1) → delta_eq 1. 구간 밖 변화/+1 아님 탐지.
 - mines_remaining: tag "flag" 안 ±1만. 깃발 꽂기 -1·빼기 +1(plan.md §1) → delta_in [-1,1].
-- mine_field: 첫 클릭 후 불변(interface.md §1 "구간 없음", plan.md §1) → mutable=false + immutable. 배열이라 compare=hash.
+- mine_field: 첫 클릭 후 불변(interface.md §1 "구간 없음", plan.md §1) → mutable=false + immutable. 배열이라 compare=bytes. 감시는 지뢰 배치 직후 시작(11-11 결정, interface.md §3.1 `field_watch`)이라 배치 자체는 위반이 아니다.
 - cell_state: 사건 "input" 직후 tag "reveal" 안에서만, 열린 칸 안 닫힘(plan.md §1) → required_event=input + per_element_monotonic(open_only). 배열.
 - cells_opened: input 직후 reveal 안, 단조 증가(plan.md §1) → monotonic non_decreasing. cell_state와 짝.
-- game_state: tag "win-check" 안에서만 상태 변경(interface.md §1) → enum_transition. 승리 정당성은 변수 간 일관성이라 별도(아래 열린 질문).
+- game_state: tag "win-check" 안에서만 상태 변경(interface.md §1, 승리·패배 모두. 게임은 칸 열기와 승패 대입을 다른 구간으로 분리 — 11-11 결정) → enum_transition. 승리 정당성은 변수 간 일관성이라 별도(아래 열린 질문).
 
 ## 설계 선택(근거 1줄씩)
 - behavior/prediction을 한 변수에 분리 수납: 탐지 2지점(mtd_end=예측, 검사 스레드=행위)에 1:1 대응(monitoring-design §4/mtd.h kind).
-- 배열(mine_field·cell_state)은 scalar=false + compare=hash: interface.md §공통규약(비스칼라 값은 null), mtd.h expected/actual=0과 일관.
+- 배열(mine_field·cell_state)은 scalar=false + compare=bytes: 요소별 규칙(per_element_monotonic)을 검사하려면 바이트 비교가 필요(11-11 결정). alert 값은 interface.md §공통규약대로 null, mtd.h expected/actual=0과 일관.
 - immutable을 behavior(mutable=false)와 prediction(immutable) 양쪽에 둠: mine_field는 "구간 없음+값 불변"이 모두 참이라 두 탐지 경로에서 다 위반으로 잡히게 함.
 - required_event를 "구간 유효 조건"으로 해석(input 없는 reveal 자체가 행위 위반): interface.md §1 "input 직후 reveal" 문구 반영.
 
-## 11-11 확정 전 열린 질문 (전유정 S1-24와 조율)
-- [ ] 배열 비교 방식(바이트 vs 블록 해시). per_element_monotonic은 요소별 비교가 필요해 단일 해시로는 "단방향성"을 못 봄 — cell_state 규칙 실현 가능성이 여기 달림. (monitoring-design §3/§8, interface.md §6)
-- [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6)
-- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4)
-- [ ] required_event의 정확한 의미론: 구간(tag) 게이트인가, 비동기 검사 경로의 수용 조건인가, 둘 다인가 — monitoring-design §4 의사코드(needs_event/recent_event)와 맞물림.
-- [ ] event_window_ms를 검사 주기 T(mtd_config.period_ms)와 연동할지 고정할지 — interface.md §6 W 연동 질문과 같은 축.
-- [ ] 자료형·크기·enum 코드값은 전부 힌트일 뿐 미정: T1 게임 구조체 확정 후 size/signed/enum.codes/count 채워야 함.
-- [ ] 변수 이름 키 표준(snake_case English) 합의 — interface.md 예시(mine_field)를 따랐으나 6개 전체 네이밍은 미합의.
+## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
+- [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
+- [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
+- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 스키마 초안(선택), 구현은 S3**
+- [ ] required_event의 정확한 의미론: 구간(tag) 게이트인가, 비동기 검사 경로의 수용 조건인가, 둘 다인가 — monitoring-design §4 의사코드(needs_event/recent_event)와 맞물림. → **S2-13(11-12, 우진·전유정)**
+- [ ] event_window_ms를 검사 주기 T(mtd_config.period_ms)와 연동할지 고정할지 — interface.md §6 W 연동 질문과 같은 축. → **S2-13(11-12, 우진·전유정)**
+- [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
+- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용 그대로 두고, 게임이 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. 현재 구현(PR #10)은 `open()` 안에서 `lost`를 대입하므로 libmtd 연동 때 수정 필요(전유정).
+- [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## 미정 요약
-- 6개 변수의 C 자료형·바이트 크기·game_state enum 코드·배열 count: 게임 미구현으로 전부 미정(힌트값만 기재).
-- cell_state per_element_monotonic 실제 검사 알고리즘: 배열 비교 방식 결정에 종속(미정).
+- 배열 count: 난이도별 런타임 결정(null). 나머지 자료형·크기·enum 코드는 11-11 승인.
+- cell_state per_element_monotonic 실제 검사 알고리즘: 바이트 비교로 결정됨, 구현은 S2(미구현).

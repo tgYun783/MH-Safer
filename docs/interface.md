@@ -1,10 +1,10 @@
 # 인터페이스 규격 (S1-04, v0)
 
-**상태** v0 초안 · 2026-11-09 · **확정** 11-11 (`mtd.h` v1과 함께)
+**상태** 2026-11-09 작성 · **v1 확정** 2026-11-11 (`mtd.h` v1과 함께) · 열린 질문(§6)은 S3에서 결정
 **짝 문서** `libmtd/include/mtd.h` (공개 API), `docs/monitoring-design.md` (감시 엔진 설계)
 
-모듈 3개(감시 라이브러리 L·게임 T1·주입기 T2·평가 T3)가 공유하는 데이터 형식을 정의한다.
-여기서 정하는 건 **① 이벤트/구간**, **② 판정(alert) 로그**, **③ 정답 라벨**, 그리고 셋을 잇는 **채점 규칙**이다.
+모듈 4개(감시 라이브러리 L·게임 T1·주입기 T2·평가 T3)가 공유하는 데이터 형식을 정의한다.
+여기서 정하는 건 **① 이벤트/구간**, **② 판정(alert) 로그**, **③ 정답 라벨**(+ 주소 로그 §3.1), 그리고 셋을 잇는 **채점 규칙**이다.
 규칙 파일(`rules.json`) 내부 구조는 S1-05에서 별도로 정한다(여기선 참조만).
 
 ## 공통 규약
@@ -28,15 +28,15 @@
 | 타이머 | 구간 `"tick"` |
 | 남은 지뢰 | 구간 `"flag"` |
 | 칸 상태 / 열린 칸 수 | 사건 `"input"` 직후 구간 `"reveal"` |
-| 게임 상태 | 구간 `"win-check"` |
-| 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반 |
+| 게임 상태 | 구간 `"win-check"` (승리·패배 모두. 칸 열기 `"reveal"`과 분리 — 11-11 결정) |
+| 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반. 감시는 지뢰 배치 직후부터(§3.1 `field_watch`) |
 
 ## 2. 판정(alert) 로그 형식
 
 `mtd_alert`(mtd.h) 1건 = JSONL 1줄.
 
 ```json
-{"detect_ns":120345678,"name":"mine_field","kind":"behavior","rule":"immutable","expected":"0x2222222222222222","actual":"0xdeadbeefcafebabe"}
+{"detect_ns":120345678,"name":"mine_field","kind":"behavior","rule":"immutable","expected":null,"actual":null}
 ```
 
 | 필드 | 뜻 |
@@ -52,17 +52,42 @@
 주입기가 변조 1건마다 JSONL 1줄을 남긴다. 평가 도구가 "실제로 무엇을 언제 변조했는지"의 **정답**으로 쓴다.
 
 ```json
-{"inject_ns":120300000,"name":"mine_field","method":"proc","scenario":"S1-immutable","from":"0x2222222222222222","to":"0xdeadbeefcafebabe","hidden":false}
+{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"S1-immutable","from":null,"to":null,"hidden":false}
 ```
 
 | 필드 | 뜻 |
 |---|---|
 | `inject_ns` | 변조 시각 (CLOCK_MONOTONIC) |
 | `name` | 변조한 변수 이름 (감시 이름과 동일 키) |
+| `addr` | 실제로 쓴 주소(16진수 문자열). 주소 로그(§3.1)의 어느 수명 구간을 노렸는지 대조용 (11-11 추가) |
 | `method` | `"internal"` \| `"vm"` \| `"proc"` \| `"ptrace"` (S1-11 경로) |
 | `scenario` | 시나리오 식별자 (주입기 3종 라벨) |
 | `from` / `to` | 변조 전/후 값, 비스칼라면 `null` |
 | `hidden` | 은닉형(정상 패턴 흉내) 여부. `true`면 탐지율 목표에서 제외하고 한계로 집계 |
+
+## 3.1 주소 로그 형식 (게임 T1 출력, 11-11 추가)
+
+감시 메모리는 재할당될 수 있다(지뢰찾기는 판마다 `GameState`를 새로 할당). 게임은 테스트 옵션 `--addr-log <파일>`을 주면 수명 지점마다 JSONL 1줄을 남기고, 주입기는 이 로그로 대상 주소를 정한다. 메모리 스캔은 하지 않는다.
+
+```json
+{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"cell_state","offset":488,"size":480},{"name":"cells_opened","offset":968,"size":4},{"name":"game_state","offset":972,"size":4}]}
+{"ns":120100000,"event":"field_watch","addr":"0x55d0c3a1e2a0","fields":[{"name":"mine_field","offset":8,"size":480}]}
+{"ns":125000000,"event":"state_free","addr":"0x55d0c3a1e2a0"}
+```
+
+| 필드 | 뜻 |
+|---|---|
+| `ns` | 기록 시각 (CLOCK_MONOTONIC) |
+| `event` | `"state_alloc"` \| `"field_watch"` \| `"state_free"` |
+| `addr` / `size` | 상태 구조체 시작 주소·전체 크기 |
+| `fields[]` | 이 시점에 감시를 시작한 변수별 `name`(규칙 파일·감시 이름과 같은 키)·`offset`·`size`. `state_alloc`·`field_watch`에만 |
+
+**순서 보장** (게임이 지킨다)
+- 생성: `mine_field`를 뺀 감시 변수마다 `mtd_watch` 완료 → `state_alloc` 기록. 주입기가 주소를 알 때는 이미 감시 중이다.
+- 지뢰 배치(첫 클릭): 배치 완료 → `mine_field` `mtd_watch` → `field_watch` 기록. 배치 전에는 `mine_field`가 감시 대상이 아니다(11-11 결정).
+- 해제: `state_free` 기록 → 감시 중인 변수마다 `mtd_unwatch` → 메모리 해제.
+
+**주입기 규칙**: 가장 최근 `state_alloc`의 `addr`에, `state_alloc`·`field_watch`로 알려진 변수의 `offset`을 더해 쓴다. 아직 알려지지 않은 변수(배치 전 `mine_field`)에는 쓰지 않는다. 그 `addr`의 `state_free`를 본 뒤에는 그 주소에 쓰지 않는다.
 
 ## 4. 채점 규칙 (평가 도구 T3)
 
@@ -76,6 +101,7 @@
   - 오탐률 = FP / 전체 판정 수  — 목표 ≤ 1%
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
+- **감시 밖 변조 제외 (11-11 추가)**: 라벨의 `addr`가 `[state_alloc.addr, state_alloc.addr + size)` 안에 드는 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`)을 찾는다. 그 구간이 끝난 뒤의 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다. 해당 변수의 감시 시작(`state_alloc` 또는 `field_watch`) 전에 들어간 변조도 같은 방식으로 뺀다.
 
 ## 5. v0에서 바뀐 점 (plan.md §2 초안 대비)
 PoC(섀도 주력) 반영:
@@ -84,7 +110,12 @@ PoC(섀도 주력) 반영:
 - `mtd_alert`에 **`kind`(behavior/prediction)** 추가 → 채점에서 행위/예측 분리 집계
 - 이벤트 외에 **구간(tag)** 을 1급 개념으로 명시
 
-## 6. 열린 질문 (11-11 확정)
+11-11 `mtd.h` v1 확정 반영 (`docs/monitoring-design.md` §8):
+- 정답 라벨에 `addr` 추가, 주소 로그(§3.1) 신설, 채점에 감시 밖(해제 후·감시 시작 전) 변조 제외 규칙 추가
+- 지뢰 배치는 배치 직후부터 감시(`field_watch`)
+- 게임 상태의 `win-check` 구간이 패배 전환도 포함
+
+## 6. 열린 질문 (S3 최소 채점기에서 결정, 담당 전유정)
 - [ ] 탐지 윈도우 W(200ms)를 검사 주기와 연동할지 고정할지
 - [ ] 비스칼라 변수(지뢰 배치·칸 상태)의 `expected/actual` 표현 (해시 문자열?) — S1-05·T3와 연동
 - [ ] 한 라벨에 alert가 여럿일 때(behavior+prediction 동시) 채점 집계 방식

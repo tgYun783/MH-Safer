@@ -108,7 +108,7 @@ PoC(섀도 주력) 반영:
 - `mtd_alert`에 **`kind`(behavior/prediction)** 추가 → 채점에서 행위/예측 분리 집계
 - 이벤트 외에 **구간(tag)** 을 1급 개념으로 명시
 
-11-11 PM 결정 반영 (`docs/monitoring-design.md` §8, 우진·전유정 확인 대기):
+11-11 `mtd.h` v1 확정 반영 (`docs/monitoring-design.md` §8):
 - 정답 라벨에 `addr` 추가, 주소 로그(§3.1) 신설, 채점에 해제된 주소 변조 제외 규칙 추가
 - 게임 상태의 `win-check` 구간이 패배 전환도 포함
 

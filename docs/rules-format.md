@@ -40,8 +40,9 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 | required_event | 구간이 유효하려면 선행해야 할 사건 이름, 없으면 null |
 | event_window_ms | 사건 후 변경 허용 시간창, 없으면 default 사용 |
 
-검사 엔진 대응(monitoring-design §4): 검사 스레드가 구간 밖에서 실제≠섀도를 보면,
-required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior alert.
+검사 엔진 대응(S2-13 결정, 아래 "S2-13 결정" 절): required_event는 **구간 게이트**다.
+검사 스레드는 구간 밖 실제≠섀도를 사건 유무와 관계없이 behavior alert로 낸다.
+구간 안 변화는 `mtd_end`에서, 그 구간 시작(`mtd_begin`) 전 event_window_ms 안에 required_event가 없었으면 behavior alert(`rule="required_event"`).
 
 ### prediction (예측 기반) — rule + params
 | rule | params | 의미 |
@@ -73,11 +74,27 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
 - [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
 - [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 스키마 초안(선택), 구현은 S3**
-- [ ] required_event의 정확한 의미론: 구간(tag) 게이트인가, 비동기 검사 경로의 수용 조건인가, 둘 다인가 — monitoring-design §4 의사코드(needs_event/recent_event)와 맞물림. → **S2-13(11-12, 우진·전유정)**
-- [ ] event_window_ms를 검사 주기 T(mtd_config.period_ms)와 연동할지 고정할지 — interface.md §6 W 연동 질문과 같은 축. → **S2-13(11-12, 우진·전유정)**
+- [x] required_event의 정확한 의미론 → **구간 게이트만**(S2-13). 비동기 수용 조건으로 쓰지 않는다. 아래 "S2-13 결정" 절.
+- [x] event_window_ms를 검사 주기 T와 연동할지 → **고정**(규칙 파일 값, 주기와 무관). 아래 "S2-13 결정" 절.
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
 - [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용 그대로 두고, 게임이 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. 현재 구현(PR #10)은 `open()` 안에서 `lost`를 대입하므로 libmtd 연동 때 수정 필요(전유정).
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
+
+## S2-13 결정 (2026-11-13, 우진 제안 · 전유정 승인은 PR 리뷰로)
+내부 인터페이스는 `libmtd/src/rules.hpp`(규칙 조회 `RuleSet::find`)와 `libmtd/src/prediction.hpp`(`mtd_end`의 예측 검사 `check_prediction`). 파서·예측 검사는 stub(`rules_stub.cpp`·`prediction_stub.cpp`)으로 시작하고 S2-21·S2-22가 교체한다.
+
+**required_event = 구간 게이트**
+- 구간 밖 변화: 사건이 있었든 없었든 behavior alert(`rule="allowed_in_tags"`, `mutable=false`면 `"immutable"`).
+- 구간 안 변화: `mtd_end`에서 마지막 required_event 시각 `e`와 그 구간의 `mtd_begin` 시각 `b`를 비교해 `e + event_window_ms ≥ b`가 아니면(사건이 없었거나 너무 오래됨) behavior alert(`rule="required_event"`). 구간 안에서 사건이 난 경우(`e > b`)도 허용.
+- 근거: monitoring-design §4 의사코드처럼 "구간 밖이라도 사건 직후면 수용"하면 `input` 직후 50ms 동안 외부 변조가 모두 합법이 된다(주입기가 사건에 맞춰 쓰면 은닉). 게임은 칸 열기를 항상 `reveal` 구간으로 감싸므로(interface.md §1) 비동기 수용이 필요 없다. 위 "설계 선택"의 "input 없는 reveal 자체가 행위 위반"과 같은 해석.
+
+**event_window_ms = 고정(주기 T와 무관)**
+- 사건 시각과 구간 시작 시각은 둘 다 게임 스레드에서 동기로 찍힌다. 검사 스레드 주기가 끼지 않으므로 T와 연동할 이유가 없다.
+- 값은 변수별 `event_window_ms`, null이면 `default_event_window_ms`(50). 파서가 채워서 `BehaviorSpec::event_window_ms`에 넣는다(엔진은 0을 받지 않는다고 가정).
+
+**규칙 없는 변수**: 규칙 파일이 없거나 변수 이름이 규칙에 없으면 **어느 구간이든 합법**(tag 무관), 구간 밖 변화만 behavior alert(`rule=null`), 예측 검사 없음.
+
+**mtd_end 예측 검사 계약**: 구간 안에서 값이 바뀐 변수만, 엔진 락을 잡은 채로 `check_prediction(rule, before=섀도, after=실제값, size)`를 1회 호출. 배열은 같은 포인터로 요소별 비교(배열 섀도 접근). `ok=false`면 prediction alert 1건(`rule=rule_id`). 반환 후 섀도는 실제값으로 동기화(ack). 같은 변화가 required_event 위반이면 behavior와 prediction alert가 둘 다 날 수 있다.
 
 ## 미정 요약
 - 배열 count: 난이도별 런타임 결정(null). 나머지 자료형·크기·enum 코드는 11-11 승인.

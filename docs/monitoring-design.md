@@ -101,6 +101,8 @@ void  mtd_event(const char *name);
 
 ## 4. 탐지 로직
 
+> **S2-13 수정 (11-13)**: 아래 의사코드의 `needs_event and recent_event` 수용 분기는 쓰지 않는다. `required_event`는 구간 게이트로만 쓴다: 구간 밖 변화는 항상 behavior alert, 구간 안 변화는 `mtd_end`에서 사건 유무를 확인한다. 자세한 내용은 `docs/rules-format.md` "S2-13 결정".
+
 의사코드:
 ```
 검사 스레드 (매 T ms):

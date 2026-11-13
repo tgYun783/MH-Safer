@@ -72,13 +72,38 @@ required_event가 event_window_ms 안에 있었으면 수용, 아니면 behavior
 ## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
 - [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
-- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 스키마 초안(선택), 구현은 S3**
-- [ ] required_event의 정확한 의미론: 구간(tag) 게이트인가, 비동기 검사 경로의 수용 조건인가, 둘 다인가 — monitoring-design §4 의사코드(needs_event/recent_event)와 맞물림. → **S2-13(11-12, 우진·전유정)**
-- [ ] event_window_ms를 검사 주기 T(mtd_config.period_ms)와 연동할지 고정할지 — interface.md §6 W 연동 질문과 같은 축. → **S2-13(11-12, 우진·전유정)**
+- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 초안 제출(선택), 회의 채택 여부 결정, 구현은 S3**
+- [x] `required_event` 의미론 → 동기 경로에서는 허용 tag와 함께 게이트로 사용하며, 사건이 `mtd_begin` 시점 기준 `event_window_ms` 안에 있어야 한다. 비동기 검사 경로는 사건 후 지정 시간 안의 변화를 수용한다. 허용 tag 자체를 대신하지 않는다. → **S2-13(우진·전유정)**
+- [x] `event_window_ms` → 고정 밀리초 시간창이며 검사 주기 `T`와 독립적이다. 변수별 값이 null이면 `default_event_window_ms`를 쓴다. → **S2-13(우진·전유정)**
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
-- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용 그대로 두고, 게임이 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. 현재 구현(PR #10)은 `open()` 안에서 `lost`를 대입하므로 libmtd 연동 때 수정 필요(전유정).
+- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 칸 열기와 승패 대입을 별도 함수로 분리했으며, libmtd 연동 시 칸 열기는 `reveal`, 승패 대입은 `win-check` 구간으로 감싼다.
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## 미정 요약
 - 배열 count: 난이도별 런타임 결정(null). 나머지 자료형·크기·enum 코드는 11-11 승인.
-- cell_state per_element_monotonic 실제 검사 알고리즘: 바이트 비교로 결정됨, 구현은 S2(미구현).
+- cell_state per_element_monotonic 실제 검사 알고리즘: 바이트 비교를 바탕으로 S2에서 구현.
+
+### 변수 간 일관성 표현 초안 (S2-24, 미채택)
+
+승리 상태는 보드 크기와 지뢰 수를 함께 알아야 검증할 수 있으므로, 변수별
+`prediction`과 분리된 최상위 `consistency` 절을 제안한다. 아래는 형식 초안이며
+S3 구현 전 팀 회의에서 채택 여부를 결정한다.
+
+```json
+{
+  "consistency": [
+    {
+      "name": "won_requires_all_safe_cells_open",
+      "when": { "variable": "game_state", "equals": "won" },
+      "require": {
+        "variable": "cells_opened",
+        "equals": { "expression": "rows * columns - mine_count" }
+      }
+    }
+  ]
+}
+```
+
+`when`이 참일 때 `require`를 검사한다. `expression`은 규칙 파일에서 임의 코드를
+실행하는 용도가 아니며, 이 제안에서는 보드 메타데이터 산술식만 허용한다. 표현식
+문법·변수 참조·alert 형식과 실행 시점은 채택 후 S3에서 구체화한다.

@@ -1,4 +1,4 @@
-/* mtd.h — 메모리 변조 탐지 라이브러리(libmtd) 공개 API (v0)
+/* mtd.h — 메모리 변조 탐지 라이브러리(libmtd) 공개 API (v1)
  *
  * 계약: 게임 ↔ 라이브러리 경계. extern "C" + 순수 C 타입만 넘긴다
  * (C++ 예외·STL 타입을 경계 밖으로 내보내지 않는다 — plan.md §2 이식성 원칙).
@@ -6,7 +6,7 @@
  * 감시 주력은 섀도 복사 + 주기 검사(docs/monitoring-design.md). mprotect 보조
  * 백엔드는 enable_mprotect로 켠다. 형식 규격은 docs/interface.md 참고.
  *
- * v0 상태: 시그니처·구조체 필드 확정용. 구현 없음.
+ * S2 v1: L1·L2 감시와 S2 규칙 조회·탐지를 제공한다.
  */
 #ifndef MTD_H
 #define MTD_H
@@ -39,7 +39,7 @@ typedef struct {
     uint64_t    detect_ns; /* 탐지 시각 (CLOCK_MONOTONIC, ns) */
 } mtd_alert;
 
-/* 탐지 시 호출. 검사 스레드 문맥에서 불리므로 무거운 작업 금지. */
+/* 탐지 시 호출. 검사 스레드 문맥에서 불리므로 무거운 작업·예외 발생 금지. */
 typedef void (*mtd_alert_cb)(const mtd_alert *alert, void *user);
 
 typedef struct {
@@ -55,11 +55,14 @@ int  mtd_init(const char *rules_path, const mtd_config *cfg);
 void mtd_shutdown(void);
 
 /* --- 감시 --- */
-/* (선택) 보조 백엔드용 감시 전용 페이지 할당. 섀도만 쓰면 일반 변수도 감시 가능. */
+/* (선택) 감시 전용 페이지 할당. 반환한 포인터는 감시 해제 후 mtd_free로 반환한다. */
 void *mtd_alloc(size_t size);
+void  mtd_free(void *p);
 
 /* 감시 등록. 등록 시 섀도 = 현재값. 성공 MTD_OK, 실패 MTD_ERR. */
 int  mtd_watch(void *addr, size_t size, const char *name);
+/* 반환 후 검사 스레드는 addr에 다시 접근하지 않는다. */
+int  mtd_unwatch(void *addr);
 
 /* --- 합법 변경 구간 (이 구간 안의 변화는 합법으로 간주, mtd_end에서 규칙 검사) --- */
 void mtd_begin(const char *tag);

@@ -49,8 +49,11 @@ bool parse_difficulty(const char *text, Difficulty &difficulty)
     return true;
 }
 
-Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
-    : state_(nullptr), allocator_(allocator), random_(seed)
+Game::Game(Config config,
+           std::uint32_t seed,
+           StateAllocator allocator,
+           StateObserver observer)
+    : state_(nullptr), allocator_(allocator), observer_(observer), random_(seed)
 {
     const std::uint64_t total_cells =
         static_cast<std::uint64_t>(config.rows) * config.columns;
@@ -75,6 +78,9 @@ Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
         state_->columns = config.columns;
         state_->mine_count = config.mines;
         state_->mines_remaining = static_cast<std::int32_t>(config.mines);
+        if (observer_.state_alloc != nullptr) {
+            observer_.state_alloc(observer_.user, state_);
+        }
     } catch (...) {
         if (allocator_.deallocate != nullptr) {
             allocator_.deallocate(memory);
@@ -88,6 +94,9 @@ Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
 Game::~Game()
 {
     if (state_ != nullptr) {
+        if (observer_.state_free != nullptr) {
+            observer_.state_free(observer_.user, state_);
+        }
         state_->~GameState();
         if (allocator_.deallocate != nullptr) {
             allocator_.deallocate(state_);
@@ -133,6 +142,9 @@ void Game::place_mines(std::size_t safe_index)
         state_->mine_field[candidates[mine]] = mine_cell;
     }
     state_->mines_placed = true;
+    if (observer_.field_watch != nullptr) {
+        observer_.field_watch(observer_.user, state_);
+    }
 }
 
 std::uint32_t Game::adjacent_mines(std::uint32_t row, std::uint32_t column) const
@@ -208,8 +220,12 @@ void Game::reveal(std::size_t first_index)
     }
 }
 
-void Game::update_status()
+void Game::update_status(bool mine_hit)
 {
+    if (mine_hit) {
+        state_->game_state = GameStatus::lost;
+        return;
+    }
     const std::uint32_t safe_cells =
         state_->rows * state_->columns - state_->mine_count;
     if (state_->cells_opened == safe_cells) {
@@ -230,12 +246,12 @@ bool Game::open(std::uint32_t row, std::uint32_t column)
         place_mines(cell);
     }
     if (state_->mine_field[cell] == mine_cell) {
-        state_->game_state = GameStatus::lost;
+        update_status(true);
         return true;
     }
 
     reveal(cell);
-    update_status();
+    update_status(false);
     return true;
 }
 

@@ -1,4 +1,4 @@
-/* mtd.h — 메모리 변조 탐지 라이브러리(libmtd) 공개 API (v0)
+/* mtd.h — 메모리 변조 탐지 라이브러리(libmtd) 공개 API (v1)
  *
  * 계약: 게임 ↔ 라이브러리 경계. extern "C" + 순수 C 타입만 넘긴다
  * (C++ 예외·STL 타입을 경계 밖으로 내보내지 않는다 — plan.md §2 이식성 원칙).
@@ -6,7 +6,10 @@
  * 감시 주력은 섀도 복사 + 주기 검사(docs/monitoring-design.md). mprotect 보조
  * 백엔드는 enable_mprotect로 켠다. 형식 규격은 docs/interface.md 참고.
  *
- * v0 상태: 시그니처·구조체 필드 확정용. 구현 없음.
+ * v1 (2026-11-11 확정): v0 시그니처 + mtd_unwatch·mtd_free (docs/monitoring-design.md §8).
+ *
+ * 스레드: mtd_begin/mtd_end는 한 스레드(게임 루프)에서만 부른다. 나머지는 아무 스레드에서나 가능.
+ * 알림 콜백은 검사 스레드에서 불린다. 콜백 안에서 mtd_* API를 부르지 말 것.
  */
 #ifndef MTD_H
 #define MTD_H
@@ -21,7 +24,7 @@ extern "C" {
 #define MTD_OK   0
 #define MTD_ERR (-1)
 
-#define MTD_DEFAULT_PERIOD_MS 50u   /* 검사 주기 기본값 (S1-12 스윕으로 확정 예정) */
+#define MTD_DEFAULT_PERIOD_MS 50u   /* 검사 주기 기본값 (S1-12 스윕, 11-11 확정) */
 
 /* 판정 종류 */
 typedef enum {
@@ -58,8 +61,18 @@ void mtd_shutdown(void);
 /* (선택) 보조 백엔드용 감시 전용 페이지 할당. 섀도만 쓰면 일반 변수도 감시 가능. */
 void *mtd_alloc(size_t size);
 
-/* 감시 등록. 등록 시 섀도 = 현재값. 성공 MTD_OK, 실패 MTD_ERR. */
+/* mtd_alloc 영역 반환. 그 안의 감시는 먼저 mtd_unwatch 할 것
+ * (빠뜨려도 라이브러리가 영역 안 감시를 정리한다). NULL·모르는 포인터는 무시.
+ * mtd_shutdown은 남은 mtd_alloc 영역을 모두 반환한다. */
+void  mtd_free(void *p);
+
+/* 감시 등록. 등록 시 섀도 = 현재값. 성공 MTD_OK, 실패 MTD_ERR
+ * (초기화 전, addr/name이 NULL, size 0, 이미 등록된 addr). name은 복사한다. */
 int  mtd_watch(void *addr, size_t size, const char *name);
+
+/* 감시 해제. 반환 후 검사 스레드는 addr를 더 읽지 않는다(락 동기화).
+ * 감시 메모리를 해제하기 전에 반드시 부른다. 미등록 주소면 MTD_ERR. */
+int  mtd_unwatch(void *addr);
 
 /* --- 합법 변경 구간 (이 구간 안의 변화는 합법으로 간주, mtd_end에서 규칙 검사) --- */
 void mtd_begin(const char *tag);

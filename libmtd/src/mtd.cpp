@@ -344,10 +344,10 @@ private:
             if (cfg_.on_alert != nullptr) {
                 cfg_.on_alert(&out, cfg_.user);
             } else {  /* interface.md §2 JSONL. 비스칼라 값은 null */
-                char exp[24] = "null", act[24] = "null";
+                char exp_s[24] = "null", act_s[24] = "null";
                 if (a.scalar) {
-                    std::snprintf(exp, sizeof exp, "\"0x%llx\"", static_cast<unsigned long long>(a.expected));
-                    std::snprintf(act, sizeof act, "\"0x%llx\"", static_cast<unsigned long long>(a.actual));
+                    std::snprintf(exp_s, sizeof exp_s, "\"0x%llx\"", static_cast<unsigned long long>(a.expected));
+                    std::snprintf(act_s, sizeof act_s, "\"0x%llx\"", static_cast<unsigned long long>(a.actual));
                 }
                 std::fprintf(stderr,
                              "{\"detect_ns\":%llu,\"name\":\"%s\",\"kind\":\"%s\",\"rule\":%s%s%s,"
@@ -355,7 +355,7 @@ private:
                              static_cast<unsigned long long>(a.detect_ns), out.name,
                              a.kind == MTD_KIND_BEHAVIOR ? "behavior" : "prediction",
                              a.rule ? "\"" : "", a.rule ? a.rule : "null", a.rule ? "\"" : "",
-                             exp, act);
+                             exp_s, act_s);
             }
         }
         batch.clear();

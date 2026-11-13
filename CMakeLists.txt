@@ -17,8 +17,9 @@ enable_testing()
 
 add_subdirectory(libmtd)
 add_subdirectory(game)
+add_subdirectory(bench)
 
 # S1-01 이후 채워지는 골격 (현재 비어 있음):
 #   injector/ T2 변조 주입기
-#   bench/    T5 자원 측정
+#   bench/    T5 자원 측정 (S2-14 bench_array_compare부터)
 #   examples/ T4 이식성 검증용 두 번째 앱

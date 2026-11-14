@@ -23,6 +23,16 @@ docs/          계획·스프린트·설계·인터페이스 규격·PoC 결과
   poc/         감시 방식 PoC 코드와 결과 (write-paths.md)
 ```
 
+## 모듈별 지침 목록
+작업 전 해당 폴더의 `AGENTS.md`를 읽는다 (각 폴더 `CLAUDE.md`는 `@AGENTS.md`만 담는다).
+
+| 폴더 | 지침 | 내용 |
+|---|---|---|
+| `libmtd/` | [libmtd/AGENTS.md](libmtd/AGENTS.md) | 감시 엔진·탐지 계층 담당, API 경계·감시 수명·콜백 주의점 |
+| `game/` | [game/AGENTS.md](game/AGENTS.md) | 감시 변수 6종, 구간 안 변경 규칙, 수명 순서(주소 로그) |
+| `injector/` | [injector/AGENTS.md](injector/AGENTS.md) | 주소 로그 기반 대상 선정, 정답 라벨, 대상 제한 |
+| `bench/` | [bench/AGENTS.md](bench/AGENTS.md) | 측정 조건 기록, "미측정" 원칙 |
+
 ## 빌드·테스트 명령
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

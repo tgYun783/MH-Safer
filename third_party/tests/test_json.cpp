@@ -15,5 +15,6 @@ TEST_CASE("nlohmann/json: 주소 로그(interface.md §3.1) 한 줄 파싱") {
 }
 
 TEST_CASE("nlohmann/json: 잘못된 입력은 예외(호출 쪽에서 잡아야 함)") {
-    CHECK_THROWS_AS(nlohmann::json::parse("{not json"), nlohmann::json::parse_error);
+    auto parse_bad = [] { auto j = nlohmann::json::parse("{not json"); (void)j; };  // nodiscard 회피
+    CHECK_THROWS_AS(parse_bad(), nlohmann::json::parse_error);
 }

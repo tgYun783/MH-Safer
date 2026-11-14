@@ -17,6 +17,10 @@
 
 Codex 등 다른 도구는 같은 스크립트를 직접 실행한다(`AGENTS.md` 빌드·테스트 명령).
 
+## 훅 (`.claude/settings.json`)
+- **C/C++·CMake 파일 수정 후 자동 빌드** (PostToolUse, `.claude/hooks/build-on-edit.sh` → `scripts/check-build.sh`). 실패하면 오류 요약이 대화에 blocking error로 보인다 → 바로 고친다. Docker가 꺼져 있으면 막지 않고 알림만.
+- 커밋 시점 검사는 git pre-commit 훅(`.githooks/`, `AGENTS.md` 참고)이 Codex와 같이 맡는다.
+
 ## 이 저장소의 결정된 방향 (바꾸려면 근거 필요)
 - 감시 **주력 = 섀도 복사+주기 검사**, mprotect는 **내부 쓰기 보조**. 근거: `docs/poc/write-paths.md`(외부 변조는 SIGSEGV를 안 냄).
 - 공개 API는 `extern "C"` 경계 유지, 섀도 엔진은 OS 중립으로 짜서 mprotect 등 플랫폼 의존 코드만 백엔드로 격리.

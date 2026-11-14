@@ -10,6 +10,13 @@
 - 서로 의존하는 작업은 스택 PR로 올리고, PR 설명에 **머지 순서**를 밝힌다.
 - 빌드·테스트는 로컬에 환경이 없으면 `AGENTS.md`의 Docker 명령으로 확인한다.
 
+## 스킬 (`.claude/skills/`)
+| 스킬 | 언제 | 하는 일 |
+|---|---|---|
+| `build-test` | "빌드하고 테스트 돌려줘", PR 전 확인 | `scripts/dev.sh build`(Docker 빌드+ctest) 실행 후 결과 보고 |
+
+Codex 등 다른 도구는 같은 스크립트를 직접 실행한다(`AGENTS.md` 빌드·테스트 명령).
+
 ## 이 저장소의 결정된 방향 (바꾸려면 근거 필요)
 - 감시 **주력 = 섀도 복사+주기 검사**, mprotect는 **내부 쓰기 보조**. 근거: `docs/poc/write-paths.md`(외부 변조는 SIGSEGV를 안 냄).
 - 공개 API는 `extern "C"` 경계 유지, 섀도 엔진은 OS 중립으로 짜서 mprotect 등 플랫폼 의존 코드만 백엔드로 격리.

@@ -45,6 +45,12 @@ docker run --rm -v "$PWD":/src -w /src gcc:13 bash -lc \
   'apt-get -qq update && apt-get -qq install -y cmake >/dev/null; \
    cmake -S . -B build && cmake --build build -j && ctest --test-dir build --output-on-failure'
 ```
+**처음 한 번: git 훅 설치** (S2-03, 도구와 무관하게 적용) — C/C++·CMake 파일을 커밋하면 빌드를 확인하고, 실패하면 커밋을 막는다:
+```bash
+git config core.hooksPath .githooks
+```
+빌드만 빠르게 확인: `scripts/check-build.sh` (Linux에 cmake가 있으면 로컬, 없으면 Docker). 테스트까지는 `scripts/dev.sh build`.
+
 PoC(쓰기 경로 실험)는 ptrace/`/proc/mem` 권한이 필요하다:
 ```bash
 docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \

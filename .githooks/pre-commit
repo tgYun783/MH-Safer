@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# git pre-commit 훅 (S2-03): C/C++·CMake 파일이 스테이징돼 있으면 빌드를 확인한다.
+# Claude Code·Codex·사람 어느 쪽으로 커밋해도 같은 규칙. 설치: git config core.hooksPath .githooks
+# 주의: 스테이징 상태가 아니라 작업 트리를 빌드한다. 급할 때 우회는 git commit --no-verify (CI는 여전히 막는다).
+set -uo pipefail
+if ! git diff --cached --name-only --diff-filter=ACMR \
+     | grep -qE '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$|(^|/)CMakeLists\.txt$'; then
+  exit 0
+fi
+root=$(git rev-parse --show-toplevel)
+"$root/scripts/check-build.sh"
+rc=$?
+if [[ $rc -eq 3 ]]; then
+  echo "pre-commit: 빌드를 확인하지 못한 채 커밋합니다. CI에서 확인하세요." >&2
+  exit 0
+fi
+[[ $rc -eq 0 ]] || { echo "pre-commit: 빌드 실패로 커밋을 막았습니다." >&2; exit 1; }

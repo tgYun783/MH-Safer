@@ -15,6 +15,7 @@ add_compile_options(-Wall -Wextra -Werror)
 
 enable_testing()
 
+add_subdirectory(third_party)   # 헤더 전용 벤더링 확인 (S2-08)
 add_subdirectory(libmtd)
 add_subdirectory(game)
 

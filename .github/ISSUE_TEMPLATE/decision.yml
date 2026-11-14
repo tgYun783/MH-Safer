@@ -1,0 +1,28 @@
+name: 결정 안건
+description: 회의에서 정할 것 (인터페이스·의미론·일정·범위 변경)
+labels: ["decision"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: 정할 것
+      description: 한 문장 질문으로
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: 선택지와 근거
+      description: 선택지마다 장단점, 측정값이 있으면 링크 (측정 안 했으면 "미측정")
+    validations:
+      required: true
+  - type: input
+    id: deadline
+    attributes:
+      label: 결정 기한
+      placeholder: "2026-11-16 (월) 스프린트 회의"
+  - type: textarea
+    id: affects
+    attributes:
+      label: 영향받는 문서·모듈
+      description: 결정되면 고칠 곳 (docs/interface.md, rules-format.md, mtd.h …)

@@ -2,11 +2,17 @@
 #include "doctest.h"
 
 #include "minesweeper.hpp"
+#include "address_log.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <new>
+#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -199,4 +205,41 @@ TEST_CASE("난이도 이름 파싱")
     CHECK(difficulty == minesweeper::Difficulty::medium);
     CHECK_FALSE(minesweeper::parse_difficulty("expert", difficulty));
     CHECK_FALSE(minesweeper::parse_difficulty(nullptr, difficulty));
+}
+
+TEST_CASE("주소 로그는 상태 생성·지뢰 감시·해제 순서로 JSONL을 기록한다")
+{
+    std::ostringstream output;
+    minesweeper::AddressLogger logger{output};
+    {
+        minesweeper::Game game({5, 5, 6}, 42, {}, logger.observer());
+        REQUIRE(game.open(2, 2));
+    }
+
+    std::istringstream input{output.str()};
+    std::vector<nlohmann::json> records;
+    std::string line;
+    while (std::getline(input, line)) {
+        records.push_back(nlohmann::json::parse(line));
+    }
+    REQUIRE(records.size() == 3);
+    CHECK(records[0]["event"] == "state_alloc");
+    CHECK(records[1]["event"] == "field_watch");
+    CHECK(records[2]["event"] == "state_free");
+    CHECK(records[0]["addr"] == records[1]["addr"]);
+    CHECK(records[1]["addr"] == records[2]["addr"]);
+    CHECK(records[0]["size"] == sizeof(minesweeper::GameState));
+    CHECK(records[0]["fields"].size() == 5);
+    CHECK(records[0]["fields"][0]["name"] == "timer");
+    CHECK(records[0]["fields"][1]["name"] == "mines_remaining");
+    CHECK(records[0]["fields"][2]["name"] == "cell_state");
+    CHECK(records[0]["fields"][3]["name"] == "cells_opened");
+    CHECK(records[0]["fields"][4]["name"] == "game_state");
+    CHECK(records[1]["fields"].size() == 1);
+    CHECK(records[1]["fields"][0]["name"] == "mine_field");
+    CHECK(records[0]["ns"].get<std::uint64_t>() <=
+          records[1]["ns"].get<std::uint64_t>());
+    CHECK(records[1]["ns"].get<std::uint64_t>() <=
+          records[2]["ns"].get<std::uint64_t>());
+    CHECK_FALSE(logger.failed());
 }

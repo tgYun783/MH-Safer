@@ -109,7 +109,7 @@ void  mtd_event(const char *name);
     if a != v.shadow:
       if v.in_window:            # 합법 구간 안 → mtd_end가 검사/동기화 담당
         continue
-      elif v.needs_event and recent_event(v.event, within=T):
+      elif v.needs_event and recent_event(v.event, within=v.event_window_ms):
         v.shadow = a             # 사건 직후 합법 변경 → 수용
       else:
         alert(behavior, v, a)    # 구간 밖 변화 = 타이밍 위반
@@ -154,7 +154,7 @@ mtd_end():
 - [x] 검사 주기 T 기본값 → **50ms 확정** (`docs/poc/period-sweep.md`: max 지연 54ms로 100ms 목표에 2배 마진, CPU 0.12%/1000변수로 무시 가능. 제약은 CPU가 아니라 지연, T≤75ms면 지연 목표 충족)
 - [x] 배열형 변수(지뢰 배치·칸 상태) 비교 방식 → **바이트 비교**. 해시도 전 바이트를 읽어야 해서 CPU 이득이 거의 없고, 칸 상태의 "열린 칸은 안 닫힘"(요소별 단방향) 규칙은 요소별 비교로만 검사 가능. 해시는 alert 표현용으로만. 오버헤드는 미측정(S2 측정).
 - [x] `mtd_alloc` 필수 여부 → **선택**. 섀도만 쓰면 일반 변수도 `mtd_watch` 가능. `enable_mprotect=1`일 때만 보조 백엔드가 `mtd_alloc` 영역을 요구하고, 그 밖의 변수는 보조 백엔드가 건너뛴다(`docs/interface.md` §5와 일치).
-- [x] 규칙 파일의 "변수-태그-사건" 매핑 표현 → **현행 변수 중심 유지**(변수마다 `behavior.allowed_in_tags`/`required_event`/`event_window_ms`). 검사 엔진의 변수 단위 검사와 1:1. `required_event` 의미론은 `docs/rules-format.md` 열린 질문으로 남김.
+- [x] 규칙 파일의 "변수-태그-사건" 매핑 표현 → **현행 변수 중심 유지**(변수마다 `behavior.allowed_in_tags`/`required_event`/`event_window_ms`). 검사 엔진의 변수 단위 검사와 1:1. 사건 의미론은 허용 tag의 게이트이며, event window는 검사 주기와 독립적이다(`docs/rules-format.md`).
 - [x] 콜백 재알림 억제(ack) → **라이브러리가 처리**. alert 직후 섀도 = 실제값(§4 의사코드). 변화 1건당 alert 1건이라 채점이 단순하고 알림 폭주가 없다.
 - [x] 감시 대상 생애주기 → **주소 기반 `mtd_unwatch(addr)` + `mtd_free(p)` 추가**(§3). 근거: T1 게임(PR #10)은 판마다 `GameState`를 새로 할당·해제한다(봇 `--speed-ms 0`으로 10분 실행 ≈ 3,470만 판, 2026-11-11 측정). 해제 API가 없으면 ① 해제된 주소 검사(오탐·정의되지 않은 동작) ② 감시 테이블 무한 증가 ③ `mtd_alloc` 누수. 실제 프로그램도 객체를 재할당하므로 게임에서 주소를 고정하지 않고 **라이브러리가 대응**한다.
 - [x] 주입기(T2)의 대상 주소 확보 → **게임이 주소를 통지**(메모리 스캔은 구현하지 않음). 게임은 `GameState` 수명 지점(생성 직후·지뢰 배치 직후·해제 직전)마다 같은 주소 정보를 **libmtd와 주입기 양쪽**에 넘긴다:

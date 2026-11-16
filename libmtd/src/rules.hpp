@@ -26,6 +26,7 @@ struct ValueSpec {
     std::size_t size         = 0;      /* 스칼라 바이트 수(type == "scalar") */
     std::size_t element_size = 1;      /* 배열 요소 바이트 수 */
     bool        is_signed    = false;  /* signed */
+    std::vector<std::pair<std::string, std::uint64_t>> enum_values;
     /* enum.codes는 prediction.transitions에 코드값으로 풀어 넣는다(파서 담당). */
 };
 
@@ -75,6 +76,15 @@ struct VarRule {
     bool allows_tag(const char *tag) const;
 };
 
+/* 최상위 consistency[] 항목. require.equals는 다른 unsigned 스칼라 변수를 참조한다. */
+struct ConsistencyRule {
+    std::string name;
+    std::string when_variable;
+    std::uint64_t when_equals = 0;
+    std::string require_variable;
+    std::string equals_variable;
+};
+
 /* 규칙 파일 전체. 엔진이 mtd_init 시 한 번 받아 읽기 전용으로 쓴다. */
 class RuleSet {
 public:
@@ -84,15 +94,18 @@ public:
     std::uint32_t default_event_window_ms = 50;
 
     void add(VarRule rule) { vars_.push_back(std::move(rule)); }
+    void add_consistency(ConsistencyRule rule) { consistency_.push_back(std::move(rule)); }
 
     /* 이름으로 조회. 없으면 nullptr(규칙 없는 변수 → 엔진은 '아무 구간이나 합법'으로 처리). */
     const VarRule *find(const char *name) const;
+    const std::vector<ConsistencyRule> &consistency() const { return consistency_; }
 
     std::size_t size() const { return vars_.size(); }
     bool        empty() const { return vars_.empty(); }
 
 private:
     std::vector<VarRule> vars_;
+    std::vector<ConsistencyRule> consistency_;
 };
 
 /* 규칙 파일 로드 (L5, S2-21 — rules_parser.cpp).

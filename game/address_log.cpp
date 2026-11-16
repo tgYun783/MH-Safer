@@ -42,6 +42,9 @@ nlohmann::json state_fields()
          {{"name", "cells_opened"},
           {"offset", offsetof(GameState, cells_opened)},
           {"size", sizeof(GameState::cells_opened)}},
+         {{"name", "safe_cells"},
+          {"offset", offsetof(GameState, safe_cells)},
+          {"size", sizeof(GameState::safe_cells)}},
          {{"name", "game_state"},
           {"offset", offsetof(GameState, game_state)},
           {"size", sizeof(GameState::game_state)}}});

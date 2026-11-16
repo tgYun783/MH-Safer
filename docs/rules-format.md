@@ -15,6 +15,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 | detect_window_ms | 채점 탐지 윈도우 W(기본 200) | interface.md §4 W=200ms |
 | default_event_window_ms | 사건→변경 허용 간격 기본(50) | mtd_config 기본 주기 50ms(mtd.h)와 연동 |
 | variables[] | 감시 변수 규칙 목록 | - |
+| consistency[] | 여러 감시 변수 사이의 값 제약(선택) | S3-23 |
 
 ## variables[] 항목
 | 필드 | 뜻 |
@@ -56,13 +57,14 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 
 검사 시점: 합법 구간 mtd_end에서 rule_ok로 검사(monitoring-design §4).
 
-## 변수별 규칙과 근거 (6종)
+## 변수별 규칙과 근거 (핵심 게임 변수 6종 + 불변 메타데이터 1종)
 - timer: tag "tick" 안 +1만. 1초마다 +1(plan.md §1) → delta_eq 1. 구간 밖 변화/+1 아님 탐지.
 - mines_remaining: tag "flag" 안 ±1만. 깃발 꽂기 -1·빼기 +1(plan.md §1) → delta_in [-1,1].
 - mine_field: 첫 클릭 후 불변(interface.md §1 "구간 없음", plan.md §1) → mutable=false + immutable. 배열이라 compare=bytes. 감시는 지뢰 배치 직후 시작(11-11 결정, interface.md §3.1 `field_watch`)이라 배치 자체는 위반이 아니다.
 - cell_state: 사건 "input" 직후 tag "reveal" 안에서만, 열린 칸 안 닫힘(plan.md §1) → required_event=input + per_element_monotonic(open_only). 배열.
 - cells_opened: input 직후 reveal 안, 단조 증가(plan.md §1) → monotonic non_decreasing. cell_state와 짝.
-- game_state: tag "win-check" 안에서만 상태 변경(interface.md §1, 승리·패배 모두. 게임은 칸 열기와 승패 대입을 다른 구간으로 분리 — 11-11 결정) → enum_transition. 승리 정당성은 변수 간 일관성이라 별도(아래 열린 질문).
+- game_state: tag "win-check" 안에서만 상태 변경(interface.md §1, 승리·패배 모두. 게임은 칸 열기와 승패 대입을 다른 구간으로 분리 — 11-11 결정) → enum_transition. 승리 정당성은 변수 간 일관성으로 검사한다(아래 절).
+- safe_cells: 판 생성 때 계산되는 안전 칸 수. 게임별 규칙에서 mutable=false + immutable로 감시하며 일관성 검사에만 쓴다.
 
 ## 설계 선택(근거 1줄씩)
 - behavior/prediction을 한 변수에 분리 수납: 탐지 2지점(mtd_end=예측, 검사 스레드=행위)에 1:1 대응(monitoring-design §4/mtd.h kind).
@@ -70,14 +72,14 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - immutable을 behavior(mutable=false)와 prediction(immutable) 양쪽에 둠: mine_field는 "구간 없음+값 불변"이 모두 참이라 두 탐지 경로에서 다 위반으로 잡히게 함.
 - required_event를 "구간 유효 조건"으로 해석(input 없는 reveal 자체가 행위 위반): interface.md §1 "input 직후 reveal" 문구 반영.
 
-## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
+## 결정 사항 (전유정 S1-24와 조율)
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
-- [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
-- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **형식 채택(11-16 PM 결정), 아래 "변수 간 일관성" 절. 구현은 S3-23**
+- [x] 비스칼라 변수의 expected/actual 표현 → `null`; 채점기는 값 필드를 해석하지 않는다 (S3-21, `interface.md` §6).
+- [x] game_state 승리 정당성("모든 안전 칸 오픈") → 변수 간 일관성 검사(L4). 스키마와 구현은 아래 "변수 간 일관성" 절(S3-23).
 - [x] required_event의 정확한 의미론 → **구간 게이트만**(S2-13). 비동기 수용 조건으로 쓰지 않는다. 아래 "S2-13 결정" 절.
 - [x] event_window_ms를 검사 주기 T와 연동할지 → **고정**(규칙 파일 값, 주기와 무관). 아래 "S2-13 결정" 절.
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
-- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용 그대로 두고, 게임이 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. 현재 구현(PR #10)은 `open()` 안에서 `lost`를 대입하므로 libmtd 연동 때 수정 필요(전유정).
+- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용하고, 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. S3-23에서 `open()`의 승패 대입을 `win-check`로 분리했다.
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## S2-13 결정 (2026-11-13, 우진 제안 · 전유정 승인은 PR 리뷰로)
@@ -108,8 +110,9 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - 배열: `element_size` ∈ {1,2,4,8}, `count`는 양수 또는 null, `compare="bytes"`, `encoding="uint"`
 - `mutable=false`면 `allowed_in_tags`는 비어 있어야 한다. `event_window_ms`(null이면 기본값)와 `default_event_window_ms`는 양수
 - 규칙과 자료형 짝: `delta_eq`·`delta_in`·`monotonic`·`enum_transition`은 스칼라, `per_element_monotonic`은 배열(`open_only`는 `element_size=1`), `enum_transition`은 `encoding="enum"`이고 전이쌍의 상태 이름이 `enum.states`에 있어야 한다
+- `consistency[]`가 있으면 배열이어야 하고, 이름은 중복될 수 없다. `when`은 선언된 unsigned scalar와 그 범위 안의 정수 또는 enum state를, `require`와 `require.equals.variable`은 선언된 unsigned scalar를 참조해야 한다.
 
-## 변수 간 일관성 (S2-24 초안, 11-16 PM 결정으로 형식 채택 · 구현 S3-23)
+## 변수 간 일관성 (S2-24 초안, 11-16 PM 결정으로 형식 채택 · S3-23 구현)
 초안: PR #15(전유정). 승리 정당성은 보드 크기와 지뢰 수를 함께 알아야 검증할 수 있으므로, 변수별 `prediction`과 분리된 최상위 `consistency` 절을 둔다.
 
 ```json
@@ -120,14 +123,14 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
       "when": { "variable": "game_state", "equals": "won" },
       "require": {
         "variable": "cells_opened",
-        "equals": { "expression": "rows * columns - mine_count" }
+        "equals": { "variable": "safe_cells" }
       }
     }
   ]
 }
 ```
 
-`when`이 참일 때 `require`를 검사한다. `expression`은 규칙 파일에서 임의 코드를 실행하는 용도가 아니며 보드 메타데이터 산술식만 허용한다.
+`when`이 참일 때 `require`를 검사한다. `require.equals.variable`은 규칙 파일에 선언된 unsigned scalar를 참조한다. 임의 산술식·코드는 지원하지 않는다.
 
 **채택한 것**: 최상위 `consistency` 절과 `when`/`require` 구조.
-**S3-23에서 정할 것**: (1) libmtd가 보드 메타데이터(안전 칸 수)를 아는 방법. libmtd에 게임 지식을 넣지 않고 공개 API(`mtd.h` v1)도 바꾸지 않는 방향을 우선 검토한다. 예를 들어 게임이 안전 칸 수를 감시 변수(`mutable=false`)로 등록하고 `require`가 그 변수를 참조하는 방식. (2) 검사 시점(`when` 변수가 바뀐 `mtd_end`), alert `kind`·`rule` 형식, 표현식 문법.
+**S3-23 결정**: (1) 게임이 `safe_cells`를 불변 감시 변수로 등록한다. 공개 API와 게임 지식 없는 libmtd 구조는 유지한다. (2) `when.variable`이 바뀐 `mtd_end`에서 검사한다. (3) 위반은 `kind="prediction"`, `rule`은 consistency 이름, alert의 `name`은 `require.variable`; `expected`는 equals 변수, `actual`은 require 변수 값이다. (4) 표현식 대신 다른 unsigned scalar 변수 참조만 허용한다.

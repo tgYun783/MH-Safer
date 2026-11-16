@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -127,6 +128,7 @@ void parse_value(const json &value, VarRule &r, std::map<std::string, std::uint6
                 if (r.value.size < 8 && code >= (std::uint64_t{1} << (r.value.size * 8u)))
                     fail(where + ".enum: code does not fit value size");
                 if (!enum_codes.emplace(state, code).second) fail(where + ".enum: duplicate state \"" + state + "\"");
+                r.value.enum_values.emplace_back(state, code);
             }
         } else if (encoding == "int") {
             if (!r.value.is_signed) fail(where + ": encoding \"int\" requires signed=true");
@@ -233,6 +235,51 @@ VarRule parse_variable(const json &item, std::uint32_t default_window, std::size
     return r;
 }
 
+ConsistencyRule parse_consistency(const json &item, const RuleSet &rs, std::size_t index)
+{
+    const std::string where = "consistency[" + std::to_string(index) + "]";
+    ConsistencyRule rule;
+    rule.name = as_string(required(item, "name", where), where + ".name");
+
+    const auto &when = required(item, "when", where);
+    rule.when_variable = as_string(required(when, "variable", where + ".when"), where + ".when.variable");
+    const VarRule *when_rule = rs.find(rule.when_variable.c_str());
+    if (when_rule == nullptr || when_rule->value.is_array || when_rule->value.is_signed ||
+        when_rule->value.size == 0 || when_rule->value.size > 8)
+        fail(where + ".when.variable: expected a watched unsigned scalar");
+    const auto &when_equals = required(when, "equals", where + ".when");
+    if (when_equals.is_string()) {
+        const auto state = as_string(when_equals, where + ".when.equals");
+        const auto code = std::find_if(
+            when_rule->value.enum_values.begin(), when_rule->value.enum_values.end(),
+            [&state](const auto &entry) { return entry.first == state; });
+        if (code == when_rule->value.enum_values.end())
+            fail(where + ".when.equals: unknown enum state \"" + state + "\"");
+        rule.when_equals = code->second;
+    } else {
+        rule.when_equals = as_u64(when_equals, where + ".when.equals");
+    }
+    if (when_rule->value.size < 8 &&
+        rule.when_equals >= (std::uint64_t{1} << (when_rule->value.size * 8u)))
+        fail(where + ".when.equals: value does not fit variable size");
+
+    const auto &require = required(item, "require", where);
+    rule.require_variable =
+        as_string(required(require, "variable", where + ".require"), where + ".require.variable");
+    const VarRule *require_rule = rs.find(rule.require_variable.c_str());
+    if (require_rule == nullptr || require_rule->value.is_array || require_rule->value.is_signed ||
+        require_rule->value.size == 0 || require_rule->value.size > 8)
+        fail(where + ".require.variable: expected an unsigned scalar");
+    const auto &equals = required(require, "equals", where + ".require");
+    rule.equals_variable =
+        as_string(required(equals, "variable", where + ".require.equals"), where + ".require.equals.variable");
+    const VarRule *equals_rule = rs.find(rule.equals_variable.c_str());
+    if (equals_rule == nullptr || equals_rule->value.is_array || equals_rule->value.is_signed ||
+        equals_rule->value.size == 0 || equals_rule->value.size > 8)
+        fail(where + ".require.equals.variable: expected an unsigned scalar");
+    return rule;
+}
+
 RuleSet parse_root(const json &root)
 {
     if (!root.is_object()) fail("root: expected object");
@@ -252,6 +299,17 @@ RuleSet parse_root(const json &root)
         VarRule r = parse_variable(vars[i], rs.default_event_window_ms, i);
         if (!seen.insert(r.name).second) fail("variables: duplicate name \"" + r.name + "\"");
         rs.add(std::move(r));
+    }
+    if (root.contains("consistency")) {
+        const json checks = root.at("consistency");
+        if (!checks.is_array()) fail("consistency: expected an array");
+        std::set<std::string> names;
+        for (std::size_t i = 0; i < checks.size(); ++i) {
+            ConsistencyRule rule = parse_consistency(checks[i], rs, i);
+            if (!names.insert(rule.name).second)
+                fail("consistency: duplicate name \"" + rule.name + "\"");
+            rs.add_consistency(std::move(rule));
+        }
     }
     return rs;
 }

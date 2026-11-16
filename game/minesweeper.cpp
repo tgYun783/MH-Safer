@@ -98,6 +98,7 @@ Game::Game(Config config,
         state_->rows = config.rows;
         state_->columns = config.columns;
         state_->mine_count = config.mines;
+        state_->safe_cells = static_cast<std::uint32_t>(total_cells - config.mines);
         state_->mines_remaining = static_cast<std::int32_t>(config.mines);
         if (observer_.state_alloc != nullptr) {
             observer_.state_alloc(observer_.user, state_);
@@ -254,9 +255,7 @@ void Game::update_status(bool mine_hit)
         set_status(GameStatus::lost);
         return;
     }
-    const std::uint32_t safe_cells =
-        state_->rows * state_->columns - state_->mine_count;
-    if (state_->cells_opened == safe_cells) {
+    if (state_->cells_opened == state_->safe_cells) {
         set_status(GameStatus::won);
     }
 }

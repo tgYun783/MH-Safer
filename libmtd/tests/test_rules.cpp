@@ -1,6 +1,6 @@
 /* test_rules.cpp — S2-21 규칙 파서 완료 기준
  *   1) game/rules.json 로드 성공
- *   2) 6개 변수 규칙 조회
+ *   2) 7개 변수 규칙 조회(핵심 변수 6종 + safe_cells 메타데이터)
  *   3) 잘못된 파일 5종 이상 거부 (mtd_init은 MTD_ERR, 예외가 경계를 넘지 않음)
  */
 #include "doctest.h"
@@ -43,7 +43,7 @@ std::string replace(std::string s, const std::string &from, const std::string &t
 
 }  // namespace
 
-TEST_CASE("S2-21 완료 기준 1·2: game/rules.json 로드, 6개 변수 규칙 조회")
+TEST_CASE("S2-21 완료 기준 1·2: game/rules.json 로드, 7개 변수 규칙 조회")
 {
     RuleSet rs;
     std::string err;
@@ -52,7 +52,7 @@ TEST_CASE("S2-21 완료 기준 1·2: game/rules.json 로드, 6개 변수 규칙 
     CHECK(rs.program == "minesweeper");
     CHECK(rs.detect_window_ms == 200);
     CHECK(rs.default_event_window_ms == 50);
-    CHECK(rs.size() == 6);
+    CHECK(rs.size() == 7);
 
     const VarRule *timer = rs.find("timer");
     REQUIRE(timer != nullptr);
@@ -101,6 +101,17 @@ TEST_CASE("S2-21 완료 기준 1·2: game/rules.json 로드, 6개 변수 규칙 
     CHECK(state->prediction.rule == PredRule::enum_transition);
     using T = std::pair<std::uint64_t, std::uint64_t>;
     CHECK(state->prediction.transitions == std::vector<T>{{0, 1}, {0, 2}});  /* playing→won, playing→lost */
+
+    const VarRule *safe = rs.find("safe_cells");
+    REQUIRE(safe != nullptr);
+    CHECK(safe->value.size == 4);
+    CHECK_FALSE(safe->behavior.is_mutable);
+    REQUIRE(rs.consistency().size() == 1);
+    CHECK(rs.consistency()[0].name == "won_requires_all_safe_cells_open");
+    CHECK(rs.consistency()[0].when_variable == "game_state");
+    CHECK(rs.consistency()[0].when_equals == 1);
+    CHECK(rs.consistency()[0].require_variable == "cells_opened");
+    CHECK(rs.consistency()[0].equals_variable == "safe_cells");
 }
 
 TEST_CASE("유효한 최소 파일은 로드된다 (잘못된 파일 테스트의 기준)")
@@ -153,6 +164,22 @@ TEST_CASE("없는 파일·NULL 경로")
     std::string err;
     CHECK_FALSE(load_rules("/nonexistent/rules.json", rs, err));
     CHECK(load_rules(nullptr, rs, err));
+    CHECK(rs.empty());
+}
+
+TEST_CASE("consistency 규칙이 없는 변수 참조를 하면 로드 실패")
+{
+    const std::string base = wrap(kValidVar);
+    const auto close = base.rfind('}');
+    REQUIRE(close != std::string::npos);
+    const std::string invalid =
+        base.substr(0, close) +
+        R"(,"consistency":[{"name":"bad","when":{"variable":"v","equals":1},)"
+        R"("require":{"variable":"v","equals":{"variable":"missing"}}}]})";
+    RuleSet rs;
+    std::string err;
+    CHECK_FALSE(load_rules(write_tmp("bad_consistency_reference", invalid).c_str(), rs, err));
+    CHECK_FALSE(err.empty());
     CHECK(rs.empty());
 }
 

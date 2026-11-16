@@ -29,7 +29,7 @@ docs/          계획·스프린트·설계·인터페이스 규격·PoC 결과
 | 폴더 | 지침 | 내용 |
 |---|---|---|
 | `libmtd/` | [libmtd/AGENTS.md](libmtd/AGENTS.md) | 감시 엔진·탐지 계층 담당, API 경계·감시 수명·콜백 주의점 |
-| `game/` | [game/AGENTS.md](game/AGENTS.md) | 감시 변수 6종, 구간 안 변경 규칙, 수명 순서(주소 로그) |
+| `game/` | [game/AGENTS.md](game/AGENTS.md) | 핵심 감시 변수 6종·일관성 메타데이터, 구간 안 변경 규칙, 수명 순서(주소 로그) |
 | `injector/` | [injector/AGENTS.md](injector/AGENTS.md) | 주소 로그 기반 대상 선정, 정답 라벨, 대상 제한 |
 | `bench/` | [bench/AGENTS.md](bench/AGENTS.md) | 측정 조건 기록, "미측정" 원칙 |
 

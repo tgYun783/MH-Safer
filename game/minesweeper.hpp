@@ -40,6 +40,7 @@ struct GameState {
     std::array<std::uint8_t, max_cells> mine_field{};
     std::array<std::uint8_t, max_cells> cell_state{};
     std::uint32_t cells_opened = 0;
+    std::uint32_t safe_cells = 0;
     GameStatus game_state = GameStatus::playing;
 
     std::uint32_t rows = 0;

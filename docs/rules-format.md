@@ -73,7 +73,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 ## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
 - [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
-- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 스키마 초안(선택), 구현은 S3**
+- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **형식 채택(11-16 PM 결정), 아래 "변수 간 일관성" 절. 구현은 S3-23**
 - [x] required_event의 정확한 의미론 → **구간 게이트만**(S2-13). 비동기 수용 조건으로 쓰지 않는다. 아래 "S2-13 결정" 절.
 - [x] event_window_ms를 검사 주기 T와 연동할지 → **고정**(규칙 파일 값, 주기와 무관). 아래 "S2-13 결정" 절.
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
@@ -108,3 +108,26 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - 배열: `element_size` ∈ {1,2,4,8}, `count`는 양수 또는 null, `compare="bytes"`, `encoding="uint"`
 - `mutable=false`면 `allowed_in_tags`는 비어 있어야 한다. `event_window_ms`(null이면 기본값)와 `default_event_window_ms`는 양수
 - 규칙과 자료형 짝: `delta_eq`·`delta_in`·`monotonic`·`enum_transition`은 스칼라, `per_element_monotonic`은 배열(`open_only`는 `element_size=1`), `enum_transition`은 `encoding="enum"`이고 전이쌍의 상태 이름이 `enum.states`에 있어야 한다
+
+## 변수 간 일관성 (S2-24 초안, 11-16 PM 결정으로 형식 채택 · 구현 S3-23)
+초안: PR #15(전유정). 승리 정당성은 보드 크기와 지뢰 수를 함께 알아야 검증할 수 있으므로, 변수별 `prediction`과 분리된 최상위 `consistency` 절을 둔다.
+
+```json
+{
+  "consistency": [
+    {
+      "name": "won_requires_all_safe_cells_open",
+      "when": { "variable": "game_state", "equals": "won" },
+      "require": {
+        "variable": "cells_opened",
+        "equals": { "expression": "rows * columns - mine_count" }
+      }
+    }
+  ]
+}
+```
+
+`when`이 참일 때 `require`를 검사한다. `expression`은 규칙 파일에서 임의 코드를 실행하는 용도가 아니며 보드 메타데이터 산술식만 허용한다.
+
+**채택한 것**: 최상위 `consistency` 절과 `when`/`require` 구조.
+**S3-23에서 정할 것**: (1) libmtd가 보드 메타데이터(안전 칸 수)를 아는 방법. libmtd에 게임 지식을 넣지 않고 공개 API(`mtd.h` v1)도 바꾸지 않는 방향을 우선 검토한다. 예를 들어 게임이 안전 칸 수를 감시 변수(`mutable=false`)로 등록하고 `require`가 그 변수를 참조하는 방식. (2) 검사 시점(`when` 변수가 바뀐 `mtd_end`), alert `kind`·`rule` 형식, 표현식 문법.

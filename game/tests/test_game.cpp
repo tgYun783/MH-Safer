@@ -2,11 +2,17 @@
 #include "doctest.h"
 
 #include "minesweeper.hpp"
+#include "address_log.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <new>
+#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -199,4 +205,190 @@ TEST_CASE("난이도 이름 파싱")
     CHECK(difficulty == minesweeper::Difficulty::medium);
     CHECK_FALSE(minesweeper::parse_difficulty("expert", difficulty));
     CHECK_FALSE(minesweeper::parse_difficulty(nullptr, difficulty));
+}
+
+TEST_CASE("주소 로그는 상태 생성·지뢰 감시·해제 순서로 JSONL을 기록한다")
+{
+    std::ostringstream output;
+    minesweeper::AddressLogger logger{output};
+    {
+        minesweeper::Game game({5, 5, 6}, 42, {}, logger.observer());
+        REQUIRE(game.open(2, 2));
+    }
+
+    std::istringstream input{output.str()};
+    std::vector<nlohmann::json> records;
+    std::string line;
+    while (std::getline(input, line)) {
+        records.push_back(nlohmann::json::parse(line));
+    }
+    REQUIRE(records.size() == 3);
+    CHECK(records[0]["event"] == "state_alloc");
+    CHECK(records[1]["event"] == "field_watch");
+    CHECK(records[2]["event"] == "state_free");
+    CHECK(records[0]["addr"] == records[1]["addr"]);
+    CHECK(records[1]["addr"] == records[2]["addr"]);
+    CHECK(records[0]["size"] == sizeof(minesweeper::GameState));
+    CHECK(records[0]["fields"].size() == 5);
+    CHECK(records[0]["fields"][0]["name"] == "timer");
+    CHECK(records[0]["fields"][1]["name"] == "mines_remaining");
+    CHECK(records[0]["fields"][2]["name"] == "cell_state");
+    CHECK(records[0]["fields"][3]["name"] == "cells_opened");
+    CHECK(records[0]["fields"][4]["name"] == "game_state");
+    CHECK(records[1]["fields"].size() == 1);
+    CHECK(records[1]["fields"][0]["name"] == "mine_field");
+    CHECK(records[0]["ns"].get<std::uint64_t>() <=
+          records[1]["ns"].get<std::uint64_t>());
+    CHECK(records[1]["ns"].get<std::uint64_t>() <=
+          records[2]["ns"].get<std::uint64_t>());
+    CHECK_FALSE(logger.failed());
+}
+
+// ---- S3-02: 감시 변수는 해당 구간 안에서만 바뀐다 (game/AGENTS.md "값 변경은 구간 안에서만") ----
+namespace {
+
+struct Snapshot {
+    std::uint32_t timer = 0;
+    std::int32_t mines_remaining = 0;
+    std::vector<std::uint8_t> mine_field;
+    std::vector<std::uint8_t> cell_state;
+    std::uint32_t cells_opened = 0;
+    minesweeper::GameStatus game_state = minesweeper::GameStatus::playing;
+};
+
+Snapshot take(const minesweeper::GameState &s)
+{
+    return {s.timer_seconds, s.mines_remaining,
+            std::vector<std::uint8_t>(s.mine_field.begin(), s.mine_field.end()),
+            std::vector<std::uint8_t>(s.cell_state.begin(), s.cell_state.end()),
+            s.cells_opened, s.game_state};
+}
+
+// 구간 밖 변화와 "다른 구간의 변수" 변화를 센다. mine_field는 field_watch 이후만 본다.
+struct ScopeChecker {
+    const minesweeper::GameState *state = nullptr;
+    Snapshot last;
+    bool field_watched = false;
+    std::string tag;
+    std::uint64_t scopes = 0;
+    std::uint64_t outside_changes = 0;
+    std::uint64_t wrong_scope_changes = 0;
+    std::uint64_t inputs = 0;
+    std::vector<std::string> sequence;
+
+    void check_outside()
+    {
+        if (state == nullptr) return;
+        const Snapshot now = take(*state);
+        if (now.timer != last.timer || now.mines_remaining != last.mines_remaining ||
+            now.cell_state != last.cell_state || now.cells_opened != last.cells_opened ||
+            now.game_state != last.game_state ||
+            (field_watched && now.mine_field != last.mine_field)) {
+            ++outside_changes;
+        }
+    }
+
+    static void alloc(void *u, const minesweeper::GameState *s)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        c->state = s;
+        c->last = take(*s);
+        c->field_watched = false;
+    }
+    static void field(void *u, const minesweeper::GameState *s)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        c->check_outside();
+        c->last.mine_field = take(*s).mine_field;  // 배치 자체는 감시 시작 전
+        c->field_watched = true;
+    }
+    static void free_state(void *u, const minesweeper::GameState *)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        c->check_outside();
+        c->state = nullptr;
+    }
+    static void begin(void *u, const char *t)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        REQUIRE(c->tag.empty());  // 게임은 구간을 중첩하지 않는다
+        c->check_outside();
+        c->tag = t;
+        c->sequence.push_back(std::string("begin:") + t);
+    }
+    static void end(void *u)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        const Snapshot now = take(*c->state);
+        const std::string &t = c->tag;
+        const bool timer = now.timer != c->last.timer;
+        const bool mines = now.mines_remaining != c->last.mines_remaining;
+        const bool cells = now.cell_state != c->last.cell_state;
+        const bool opened = now.cells_opened != c->last.cells_opened;
+        const bool status = now.game_state != c->last.game_state;
+        const bool field = c->field_watched && now.mine_field != c->last.mine_field;
+        const bool ok = !field && (t == "tick" || !timer) && (t == "flag" || !mines) &&
+                        (t == "reveal" || (!cells && !opened)) && (t == "win-check" || !status);
+        if (!ok) ++c->wrong_scope_changes;
+        c->last = now;
+        ++c->scopes;
+        c->tag.clear();
+        c->sequence.push_back("end");
+    }
+    static void event(void *u, const char *name)
+    {
+        auto *c = static_cast<ScopeChecker *>(u);
+        if (std::string(name) == "input") ++c->inputs;
+        c->sequence.push_back(std::string("event:") + name);
+    }
+
+    minesweeper::StateObserver observer()
+    {
+        minesweeper::StateObserver o{};
+        o.user = this;
+        o.state_alloc = alloc;
+        o.field_watch = field;
+        o.state_free = free_state;
+        o.scope_begin = begin;
+        o.scope_end = end;
+        o.event = event;
+        return o;
+    }
+};
+
+}  // namespace
+
+TEST_CASE("S3-02: 칸 열기는 input 사건 → reveal 구간, 승패는 win-check 구간")
+{
+    ScopeChecker checker;
+    minesweeper::Game game(minesweeper::config_for(minesweeper::Difficulty::easy), 7,
+                           minesweeper::StateAllocator{}, checker.observer());
+    REQUIRE(game.open(4, 4));
+    REQUIRE(checker.sequence.size() >= 3);
+    CHECK(checker.sequence[0] == "event:input");
+    CHECK(checker.sequence[1] == "begin:reveal");
+    CHECK(checker.sequence[2] == "end");
+    game.tick();
+    CHECK(checker.sequence[checker.sequence.size() - 2] == "begin:tick");
+}
+
+TEST_CASE("S3-02: 봇 1,000판 동안 감시 변수는 구간 밖에서 바뀌지 않고, 구간마다 허용된 변수만 바뀐다")
+{
+    ScopeChecker checker;
+    const auto observer = checker.observer();
+    std::uint64_t games = 0;
+    for (std::uint32_t seed = 1; games < 1000; ++seed, ++games) {
+        minesweeper::Game game(minesweeper::config_for(minesweeper::Difficulty::easy), seed,
+                               minesweeper::StateAllocator{}, observer);
+        minesweeper::Bot bot(seed ^ 0x5bd1e995u);
+        for (int step = 0; step < 200 && game.state().game_state == minesweeper::GameStatus::playing;
+             ++step) {
+            bot.step(game);
+            if (step % 3 == 0) game.tick();
+        }
+    }
+    CHECK(checker.scopes > 1000);
+    CHECK(checker.inputs > 1000);
+    CHECK(checker.outside_changes == 0);
+    CHECK(checker.wrong_scope_changes == 0);
 }

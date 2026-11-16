@@ -1,4 +1,4 @@
-/* rules.cpp — RuleSet 조회 (S2-13). 파서(load_rules)는 rules_stub.cpp → S2-21에서 교체. */
+/* rules.cpp — RuleSet 조회 (S2-13). 파서(load_rules)는 rules_parser.cpp(S2-21). */
 #include "rules.hpp"
 #include "prediction.hpp"
 

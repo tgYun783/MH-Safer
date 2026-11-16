@@ -49,9 +49,27 @@ struct GameState {
     std::array<std::uint8_t, max_cells> flagged{};
 };
 
+// Lifecycle points (docs/interface.md §3.1) and legal-change scopes (§1).
+// Every write to a watched variable happens between scope_begin(tag) and
+// scope_end(): "tick" timer, "flag" mines_remaining, "reveal" cell_state and
+// cells_opened, "win-check" game_state. open() signals the "input" event first.
+// The core does not depend on libmtd; game/mtd_glue maps these to mtd_*.
+struct StateObserver {
+    void *user = nullptr;
+    void (*state_alloc)(void *, const GameState *) = nullptr;
+    void (*field_watch)(void *, const GameState *) = nullptr;
+    void (*state_free)(void *, const GameState *) = nullptr;
+    void (*scope_begin)(void *, const char *tag) = nullptr;
+    void (*scope_end)(void *) = nullptr;
+    void (*event)(void *, const char *name) = nullptr;
+};
+
 class Game {
 public:
-    Game(Config config, std::uint32_t seed, StateAllocator allocator = {});
+    Game(Config config,
+         std::uint32_t seed,
+         StateAllocator allocator = {},
+         StateObserver observer = {});
     ~Game();
 
     Game(const Game &) = delete;
@@ -69,13 +87,18 @@ public:
 private:
     GameState *state_;
     StateAllocator allocator_;
+    StateObserver observer_;
     std::mt19937 random_;
 
     bool in_bounds(std::uint32_t row, std::uint32_t column) const;
     std::size_t index(std::uint32_t row, std::uint32_t column) const;
     void place_mines(std::size_t safe_index);
     void reveal(std::size_t first_index);
-    void update_status();
+    void update_status(bool mine_hit);
+    void set_status(GameStatus status);
+    void scope_begin(const char *tag);
+    void scope_end();
+    void signal(const char *event);
 };
 
 class Bot {

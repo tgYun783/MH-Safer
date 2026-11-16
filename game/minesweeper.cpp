@@ -18,6 +18,27 @@ constexpr std::uint8_t flagged_cell = 1;
 
 }  // namespace
 
+void Game::scope_begin(const char *tag)
+{
+    if (observer_.scope_begin != nullptr) {
+        observer_.scope_begin(observer_.user, tag);
+    }
+}
+
+void Game::scope_end()
+{
+    if (observer_.scope_end != nullptr) {
+        observer_.scope_end(observer_.user);
+    }
+}
+
+void Game::signal(const char *event)
+{
+    if (observer_.event != nullptr) {
+        observer_.event(observer_.user, event);
+    }
+}
+
 Config config_for(Difficulty difficulty)
 {
     switch (difficulty) {
@@ -49,8 +70,11 @@ bool parse_difficulty(const char *text, Difficulty &difficulty)
     return true;
 }
 
-Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
-    : state_(nullptr), allocator_(allocator), random_(seed)
+Game::Game(Config config,
+           std::uint32_t seed,
+           StateAllocator allocator,
+           StateObserver observer)
+    : state_(nullptr), allocator_(allocator), observer_(observer), random_(seed)
 {
     const std::uint64_t total_cells =
         static_cast<std::uint64_t>(config.rows) * config.columns;
@@ -75,6 +99,9 @@ Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
         state_->columns = config.columns;
         state_->mine_count = config.mines;
         state_->mines_remaining = static_cast<std::int32_t>(config.mines);
+        if (observer_.state_alloc != nullptr) {
+            observer_.state_alloc(observer_.user, state_);
+        }
     } catch (...) {
         if (allocator_.deallocate != nullptr) {
             allocator_.deallocate(memory);
@@ -88,6 +115,9 @@ Game::Game(Config config, std::uint32_t seed, StateAllocator allocator)
 Game::~Game()
 {
     if (state_ != nullptr) {
+        if (observer_.state_free != nullptr) {
+            observer_.state_free(observer_.user, state_);
+        }
         state_->~GameState();
         if (allocator_.deallocate != nullptr) {
             allocator_.deallocate(state_);
@@ -133,6 +163,9 @@ void Game::place_mines(std::size_t safe_index)
         state_->mine_field[candidates[mine]] = mine_cell;
     }
     state_->mines_placed = true;
+    if (observer_.field_watch != nullptr) {
+        observer_.field_watch(observer_.user, state_);
+    }
 }
 
 std::uint32_t Game::adjacent_mines(std::uint32_t row, std::uint32_t column) const
@@ -208,12 +241,23 @@ void Game::reveal(std::size_t first_index)
     }
 }
 
-void Game::update_status()
+void Game::set_status(GameStatus status)
 {
+    scope_begin("win-check");
+    state_->game_state = status;
+    scope_end();
+}
+
+void Game::update_status(bool mine_hit)
+{
+    if (mine_hit) {
+        set_status(GameStatus::lost);
+        return;
+    }
     const std::uint32_t safe_cells =
         state_->rows * state_->columns - state_->mine_count;
     if (state_->cells_opened == safe_cells) {
-        state_->game_state = GameStatus::won;
+        set_status(GameStatus::won);
     }
 }
 
@@ -226,16 +270,19 @@ bool Game::open(std::uint32_t row, std::uint32_t column)
     if (state_->cell_state[cell] != hidden_cell || state_->flagged[cell] != 0) {
         return false;
     }
+    signal("input");
     if (!state_->mines_placed) {
         place_mines(cell);
     }
     if (state_->mine_field[cell] == mine_cell) {
-        state_->game_state = GameStatus::lost;
+        update_status(true);
         return true;
     }
 
+    scope_begin("reveal");
     reveal(cell);
-    update_status();
+    scope_end();
+    update_status(false);
     return true;
 }
 
@@ -249,6 +296,7 @@ bool Game::toggle_flag(std::uint32_t row, std::uint32_t column)
         return false;
     }
 
+    scope_begin("flag");
     if (state_->flagged[cell] == flagged_cell) {
         state_->flagged[cell] = 0;
         ++state_->mines_remaining;
@@ -256,6 +304,7 @@ bool Game::toggle_flag(std::uint32_t row, std::uint32_t column)
         state_->flagged[cell] = flagged_cell;
         --state_->mines_remaining;
     }
+    scope_end();
     return true;
 }
 
@@ -263,7 +312,9 @@ void Game::tick()
 {
     if (state_->mines_placed && state_->game_state == GameStatus::playing &&
         state_->timer_seconds < std::numeric_limits<std::uint32_t>::max()) {
+        scope_begin("tick");
         ++state_->timer_seconds;
+        scope_end();
     }
 }
 

@@ -95,7 +95,7 @@ private:
     std::vector<VarRule> vars_;
 };
 
-/* 규칙 파일 로드 (L5, 전유정 S2-21이 구현).
+/* 규칙 파일 로드 (L5, S2-21 — rules_parser.cpp).
  *   성공: true, out 채움. 실패: false, err에 사람이 읽을 이유.
  *   예외를 던지지 않는다(noexcept) — mtd_init이 실패를 MTD_ERR로 바꿔 반환한다. */
 bool load_rules(const char *path, RuleSet &out, std::string &err) noexcept;

@@ -73,7 +73,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 ## 열린 질문 (전유정 S1-24와 조율, 체크된 것은 11-11 결정)
 - [x] 배열 비교 방식 → **바이트 비교**(11-11 결정). per_element_monotonic을 요소별로 검사할 수 있어 cell_state 규칙 실현 가능. (monitoring-design §3/§8)
 - [ ] 비스칼라 변수의 expected/actual 표현(해시 문자열 등) — alert 로그·채점(T3)과 연동. (interface.md §6) → **S3 최소 채점기(전유정)**
-- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **S2-24 스키마 초안(선택), 구현은 S3**
+- [ ] game_state 승리 정당성("모든 안전 칸 오픈")은 변수 간 일관성 검사(L4). 규칙 파일이 cross-check(cells_opened 등 참조)를 어떻게 표현할지 스키마 확장 필요 — 현재 enum_transition는 전이쌍만 검사. (plan.md §1, 기능 L4) → **형식 채택(11-16 PM 결정), 아래 "변수 간 일관성" 절. 구현은 S3-23**
 - [x] required_event의 정확한 의미론 → **구간 게이트만**(S2-13). 비동기 수용 조건으로 쓰지 않는다. 아래 "S2-13 결정" 절.
 - [x] event_window_ms를 검사 주기 T와 연동할지 → **고정**(규칙 파일 값, 주기와 무관). 아래 "S2-13 결정" 절.
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
@@ -81,7 +81,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## S2-13 결정 (2026-11-13, 우진 제안 · 전유정 승인은 PR 리뷰로)
-내부 인터페이스는 `libmtd/src/rules.hpp`(규칙 조회 `RuleSet::find`)와 `libmtd/src/prediction.hpp`(`mtd_end`의 예측 검사 `check_prediction`). 파서·예측 검사는 stub(`rules_stub.cpp`·`prediction_stub.cpp`)으로 시작하고 S2-21·S2-22가 교체한다.
+내부 인터페이스는 `libmtd/src/rules.hpp`(규칙 조회 `RuleSet::find`)와 `libmtd/src/prediction.hpp`(`mtd_end`의 예측 검사 `check_prediction`). 파서는 `rules_parser.cpp`(S2-21), 예측 검사는 `prediction.cpp`(S2-22)가 구현한다(처음 stub은 교체됨).
 
 **required_event = 구간 게이트**
 - 구간 밖 변화: 사건이 있었든 없었든 behavior alert(`rule="allowed_in_tags"`, `mutable=false`면 `"immutable"`).
@@ -93,9 +93,41 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - 값은 변수별 `event_window_ms`, null이면 `default_event_window_ms`(50). 파서가 채워서 `BehaviorSpec::event_window_ms`에 넣는다(엔진은 0을 받지 않는다고 가정).
 
 **규칙 없는 변수**: 규칙 파일이 없거나 변수 이름이 규칙에 없으면 **어느 구간이든 합법**(tag 무관), 구간 밖 변화만 behavior alert(`rule=null`), 예측 검사 없음.
+- `mtd_watch` 검사(11-16 회의 결정, 안건 1-4): 규칙 파일이 있는데 이름이 규칙에 없으면 **등록은 허용**하고 stderr에 이름마다 한 번 경고한다(오타로 규칙이 조용히 빠지는 것을 드러내되, 규칙 없이 감시만 붙이는 이식 사용(T4)은 막지 않음). 이름은 있는데 크기가 규칙과 다르면 **`MTD_ERR`로 거부**한다(스칼라는 `value.size`, 배열은 요소 크기의 배수 — 개수는 런타임 결정이라 보지 않음).
 
 **mtd_end 예측 검사 계약**: 구간 안에서 값이 바뀐 변수만, 엔진 락을 잡은 채로 `check_prediction(rule, before=섀도, after=실제값, size)`를 1회 호출. 배열은 같은 포인터로 요소별 비교(배열 섀도 접근). `ok=false`면 prediction alert 1건(`rule=rule_id`). 반환 후 섀도는 실제값으로 동기화(ack). 같은 변화가 required_event 위반이면 behavior와 prediction alert가 둘 다 날 수 있다.
 
 ## 미정 요약
 - 배열 count: 난이도별 런타임 결정(null). 나머지 자료형·크기·enum 코드는 11-11 승인.
-- cell_state per_element_monotonic 실제 검사 알고리즘: 바이트 비교로 결정됨, 구현은 S2(미구현).
+- ~~cell_state per_element_monotonic 실제 검사 알고리즘~~ → S2-22 구현: 바뀐 요소마다 `element_size` 단위로 비교, `open_only`는 닫힘(0) → 열림(≠0)만 허용.
+
+## 파서 검증 규칙 (S2-21)
+스키마 v0 필드가 모두 있어야 한다(null 허용 필드: `count`·`required_event`·`event_window_ms`). 아래 중 하나라도 어기면 `load_rules` 실패 → `mtd_init`이 `MTD_ERR`.
+- `schema_version`은 `"0"`, `variables`는 비어 있지 않은 배열, 변수 이름 중복 금지
+- 스칼라: `size` ∈ {1,2,4,8}, `compare="value"`, `encoding`은 `int`(signed=true)·`uint`(signed=false)·`enum`(unsigned, `states`·`codes` 길이 같음, 코드가 크기에 들어감)
+- 배열: `element_size` ∈ {1,2,4,8}, `count`는 양수 또는 null, `compare="bytes"`, `encoding="uint"`
+- `mutable=false`면 `allowed_in_tags`는 비어 있어야 한다. `event_window_ms`(null이면 기본값)와 `default_event_window_ms`는 양수
+- 규칙과 자료형 짝: `delta_eq`·`delta_in`·`monotonic`·`enum_transition`은 스칼라, `per_element_monotonic`은 배열(`open_only`는 `element_size=1`), `enum_transition`은 `encoding="enum"`이고 전이쌍의 상태 이름이 `enum.states`에 있어야 한다
+
+## 변수 간 일관성 (S2-24 초안, 11-16 PM 결정으로 형식 채택 · 구현 S3-23)
+초안: PR #15(전유정). 승리 정당성은 보드 크기와 지뢰 수를 함께 알아야 검증할 수 있으므로, 변수별 `prediction`과 분리된 최상위 `consistency` 절을 둔다.
+
+```json
+{
+  "consistency": [
+    {
+      "name": "won_requires_all_safe_cells_open",
+      "when": { "variable": "game_state", "equals": "won" },
+      "require": {
+        "variable": "cells_opened",
+        "equals": { "expression": "rows * columns - mine_count" }
+      }
+    }
+  ]
+}
+```
+
+`when`이 참일 때 `require`를 검사한다. `expression`은 규칙 파일에서 임의 코드를 실행하는 용도가 아니며 보드 메타데이터 산술식만 허용한다.
+
+**채택한 것**: 최상위 `consistency` 절과 `when`/`require` 구조.
+**S3-23에서 정할 것**: (1) libmtd가 보드 메타데이터(안전 칸 수)를 아는 방법. libmtd에 게임 지식을 넣지 않고 공개 API(`mtd.h` v1)도 바꾸지 않는 방향을 우선 검토한다. 예를 들어 게임이 안전 칸 수를 감시 변수(`mutable=false`)로 등록하고 `require`가 그 변수를 참조하는 방식. (2) 검사 시점(`when` 변수가 바뀐 `mtd_end`), alert `kind`·`rule` 형식, 표현식 문법.

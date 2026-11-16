@@ -314,3 +314,20 @@ TEST_CASE("규칙 없는 변수: 아무 구간이나 합법, 구간 밖은 rule=
     CHECK(f.col.items()[0].rule.empty());
     mtd_unwatch(&other);
 }
+
+TEST_CASE("11-16 결정: 규칙과 크기가 다른 mtd_watch는 거부, 배열은 요소 크기의 배수만 확인")
+{
+    Fixture f(10);
+    std::uint64_t wide = 0;
+    CHECK(mtd_watch(&wide, sizeof(wide), "timer") == MTD_ERR);  /* timer는 4바이트 */
+    CHECK(mtd_test_watch_count() == 0);
+
+    std::uint32_t timer = 0;
+    CHECK(mtd_watch(&timer, sizeof(timer), "timer") == MTD_OK);
+
+    std::uint8_t field[480] = {};
+    CHECK(mtd_watch(field, sizeof(field), "mine_field") == MTD_OK);  /* 배열 개수는 런타임 */
+    CHECK(mtd_test_watch_count() == 2);
+    mtd_unwatch(field);
+    mtd_unwatch(&timer);
+}

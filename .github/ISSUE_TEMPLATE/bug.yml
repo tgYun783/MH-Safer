@@ -1,0 +1,35 @@
+name: 버그
+description: 동작이 틀리거나 빌드·테스트가 깨짐
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: 모듈
+      description: 통합 중 발견한 모듈 내부 버그는 해당 담당자에게 (docs/roles.md)
+      options: [libmtd (엔진·행위), libmtd (규칙·예측), game, injector, bench, 빌드·CI·하네스, 문서]
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 재현 방법
+      description: 명령, 시드(--seed), 커밋 해시
+      placeholder: |
+        git rev-parse HEAD → ...
+        scripts/dev.sh build
+        ./build/game/minesweeper --bot --seed 42 --speed-ms 5 --duration-sec 60
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작 / 실제 동작
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그·출력
+      description: alert JSONL, ctest 출력 등 (긴 로그는 접어서)
+      render: text

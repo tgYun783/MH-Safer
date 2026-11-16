@@ -23,6 +23,16 @@ docs/          계획·스프린트·설계·인터페이스 규격·PoC 결과
   poc/         감시 방식 PoC 코드와 결과 (write-paths.md)
 ```
 
+## 모듈별 지침 목록
+작업 전 해당 폴더의 `AGENTS.md`를 읽는다 (각 폴더 `CLAUDE.md`는 `@AGENTS.md`만 담는다).
+
+| 폴더 | 지침 | 내용 |
+|---|---|---|
+| `libmtd/` | [libmtd/AGENTS.md](libmtd/AGENTS.md) | 감시 엔진·탐지 계층 담당, API 경계·감시 수명·콜백 주의점 |
+| `game/` | [game/AGENTS.md](game/AGENTS.md) | 감시 변수 6종, 구간 안 변경 규칙, 수명 순서(주소 로그) |
+| `injector/` | [injector/AGENTS.md](injector/AGENTS.md) | 주소 로그 기반 대상 선정, 정답 라벨, 대상 제한 |
+| `bench/` | [bench/AGENTS.md](bench/AGENTS.md) | 측정 조건 기록, "미측정" 원칙 |
+
 ## 빌드·테스트 명령
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -35,6 +45,12 @@ docker run --rm -v "$PWD":/src -w /src gcc:13 bash -lc \
   'apt-get -qq update && apt-get -qq install -y cmake >/dev/null; \
    cmake -S . -B build && cmake --build build -j && ctest --test-dir build --output-on-failure'
 ```
+**처음 한 번: git 훅 설치** (S2-03, 도구와 무관하게 적용) — C/C++·CMake 파일을 커밋하면 빌드를 확인하고, 실패하면 커밋을 막는다:
+```bash
+git config core.hooksPath .githooks
+```
+빌드만 빠르게 확인: `scripts/check-build.sh` (Linux에 cmake가 있으면 로컬, 없으면 Docker). 테스트까지는 `scripts/dev.sh build`.
+
 PoC(쓰기 경로 실험)는 ptrace/`/proc/mem` 권한이 필요하다:
 ```bash
 docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \

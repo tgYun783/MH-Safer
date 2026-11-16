@@ -47,7 +47,7 @@ TEST_CASE("RuleSet: 이름으로 변수 규칙 조회")
     CHECK(rs.find(nullptr) == nullptr);
 }
 
-TEST_CASE("check_prediction 호출 계약 (stub은 항상 ok)")
+TEST_CASE("check_prediction 호출 계약")
 {
     VarRule r;
     r.name = "timer";
@@ -59,7 +59,7 @@ TEST_CASE("check_prediction 호출 계약 (stub은 항상 ok)")
     std::memcpy(b, &before, 4);
     std::memcpy(a, &after, 4);
     PredictionResult res = check_prediction(r, b, a, 4);
-    (void)res;  // stub: ok. S2-22에서 실제 판정으로 교체되면 그쪽 테스트가 검사한다.
+    CHECK(res.ok);  // 규칙별 판정은 test_prediction (S2-22)
     CHECK(std::strcmp(pred_rule_name(PredRule::delta_eq), "delta_eq") == 0);
     CHECK(pred_rule_name(PredRule::none) == nullptr);
 }

@@ -1,7 +1,13 @@
 # libmtd: 메모리 변조 탐지 라이브러리. 정적/공유 둘 다 빌드 (plan.md §2).
-# v0: 공개 API 스텁만. 실제 구현(섀도 엔진·mprotect 백엔드)은 S2에서.
+#   rules.cpp            규칙 조회 (S2-13 내부 인터페이스)
+#   rules_stub.cpp       규칙 파서 stub → S2-21에서 교체
+#   prediction_stub.cpp  예측 검사 stub → S2-22에서 교체
 
-set(MTD_SOURCES src/mtd.cpp)
+set(MTD_SOURCES
+    src/mtd.cpp
+    src/rules.cpp
+    src/rules_stub.cpp
+    src/prediction_stub.cpp)
 
 add_library(mtd STATIC ${MTD_SOURCES})
 target_include_directories(mtd PUBLIC include)

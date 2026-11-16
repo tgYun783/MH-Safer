@@ -52,7 +52,7 @@
 주입기가 변조 1건마다 JSONL 1줄을 남긴다. 평가 도구가 "실제로 무엇을 언제 변조했는지"의 **정답**으로 쓴다.
 
 ```json
-{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"S1-immutable","from":null,"to":null,"hidden":false}
+{"inject_ns":120300000,"name":"mine_field","addr":"0x55d0c3a1e2a8","method":"proc","scenario":"V-mine_field","from":null,"to":null,"hidden":false}
 ```
 
 | 필드 | 뜻 |
@@ -98,7 +98,7 @@
 - **거짓 양성(FP)**: 어떤 라벨과도 매칭 안 되는 alert (정상 변경을 때린 것)
 - **지표**:
   - 탐지율 = TP / (`hidden=false`인 라벨 수)  — 목표 ≥ 90%
-  - 오탐률 = FP / 전체 판정 수  — 목표 ≤ 1%
+  - 오탐률 = FP / 합법 구간 수(`mtd_end` 호출 수)  — 목표 ≤ 1%. 10분당 FP 건수도 함께 보고 (11-16 PM 결정, `docs/experiment.md` §7)
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
 - **감시 밖 변조 제외 (11-11 추가)**: 라벨의 `addr`가 `[state_alloc.addr, state_alloc.addr + size)` 안에 드는 수명 구간(주소 로그 §3.1의 `state_alloc`~`state_free`)을 찾는다. 그 구간이 끝난 뒤의 변조, 즉 `inject_ns ≥ state_free.ns`이면 감시 대상이 없던 쓰기이므로 FN에서 빼고 "stale"로 따로 센다. 해당 변수의 감시 시작(`state_alloc` 또는 `field_watch`) 전에 들어간 변조도 같은 방식으로 뺀다.

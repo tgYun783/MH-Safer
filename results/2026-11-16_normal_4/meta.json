@@ -1,0 +1,6 @@
+{"experiment":"normal","seed":4,"difficulty":"hard","speed_ms":50,"duration_sec":600,
+ "command":"./build/game/minesweeper --bot --difficulty hard --seed 4 --speed-ms 50 --duration-sec 600 --addr-log results/2026-11-16_normal_4/addr.jsonl --alert-log results/2026-11-16_normal_4/alerts.jsonl --stats results/2026-11-16_normal_4/stats.json","exit_code":0,
+ "commit":"9114384caae5079342d741a4222bff57e702450e","dirty":false,"build":"Release","rules":"game/rules.json","period_ms":50,"enable_mprotect":0,
+ "concurrent_runs":5,"start_utc":"2026-11-16T04:17:36Z","end_utc":"2026-11-16T04:27:36Z",
+ "container":{"image":"mh-safer-dev","compiler":"g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0","nproc":8},
+ "host":{"os":"Darwin 25.5.0 arm64","cpu":"Apple M2","cores":"8","virtualization":"Docker Desktop (macOS)","docker":"29.8.0"}}

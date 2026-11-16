@@ -247,7 +247,7 @@ ConsistencyRule parse_consistency(const json &item, const RuleSet &rs, std::size
     if (when_rule == nullptr || when_rule->value.is_array || when_rule->value.is_signed ||
         when_rule->value.size == 0 || when_rule->value.size > 8)
         fail(where + ".when.variable: expected a watched unsigned scalar");
-    const auto &when_equals = required(when, "equals", where + ".when");
+    const json when_equals = required(when, "equals", where + ".when");
     if (when_equals.is_string()) {
         const auto state = as_string(when_equals, where + ".when.equals");
         const auto code = std::find_if(
@@ -270,7 +270,7 @@ ConsistencyRule parse_consistency(const json &item, const RuleSet &rs, std::size
     if (require_rule == nullptr || require_rule->value.is_array || require_rule->value.is_signed ||
         require_rule->value.size == 0 || require_rule->value.size > 8)
         fail(where + ".require.variable: expected an unsigned scalar");
-    const auto &equals = required(require, "equals", where + ".require");
+    const json equals = required(require, "equals", where + ".require");
     rule.equals_variable =
         as_string(required(equals, "variable", where + ".require.equals"), where + ".require.equals.variable");
     const VarRule *equals_rule = rs.find(rule.equals_variable.c_str());

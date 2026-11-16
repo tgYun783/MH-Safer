@@ -11,7 +11,35 @@ cmake --build build -j
 ./build/game/minesweeper --difficulty hard
 ./build/game/minesweeper --bot --seed 42 --speed-ms 5 --duration-sec 600
 ./build/game/minesweeper --bot --seed 42 --speed-ms 0 --duration-sec 10 --addr-log /tmp/addr.jsonl
+./build/game/minesweeper --bot --difficulty hard --seed 1 --speed-ms 50 --duration-sec 600 \
+  --addr-log addr.jsonl --alert-log alerts.jsonl --stats stats.json   # 실험 조건(docs/experiment.md §3)
+./build/game/minesweeper --no-mtd        # libmtd 없이 실행
 ```
+
+## libmtd 감시 (S3-02)
+기본으로 libmtd가 켜져 있고 `--rules`(기본: 소스 트리의 `game/rules.json`)로 초기화합니다.
+
+| 옵션 | 뜻 |
+|---|---|
+| `--rules FILE` | 규칙 파일. 로드에 실패하면 종료 코드 2 |
+| `--no-mtd` | libmtd를 켜지 않음 |
+| `--alert-log FILE` | alert를 JSONL로 기록(`docs/interface.md` §2). 배열 변수의 `expected`/`actual`은 `null` |
+| `--stats FILE` | 실행 요약 JSON: 판 수, `alerts`, `mtd_end_count`(오탐률 분모, `docs/experiment.md` §7), `watch_errors` |
+
+봇 상태 줄과 대화형 화면 머리에 `alerts=N`이 나옵니다.
+
+연결 구조: 게임 코어(`minesweeper_core`)는 libmtd에 의존하지 않고 `StateObserver` 훅만 냅니다.
+`mtd_glue.cpp`(`MtdMonitor`)가 훅을 libmtd 호출로 바꿉니다.
+
+| 훅 | libmtd |
+|---|---|
+| `state_alloc` | `mtd_watch` 5개(`mine_field` 제외) → 주소 로그 `state_alloc` |
+| `field_watch` | `mtd_watch(mine_field)` → 주소 로그 `field_watch` |
+| `state_free` | 주소 로그 `state_free` → `mtd_unwatch` (메모리 해제 전) |
+| `scope_begin`/`scope_end` | `mtd_begin`/`mtd_end`: `tick`(timer), `flag`(mines_remaining), `reveal`(cell_state·cells_opened), `win-check`(game_state) |
+| `event` | `mtd_event("input")`: `open()` 진입 시, `reveal` 구간 직전 |
+
+새 판은 이전 판을 먼저 해제한 뒤 만듭니다. 그래서 감시 수는 배치 전 5개, 배치 후 6개를 넘지 않습니다.
 
 대화형 조작은 `w/a/s/d`로 이동하고 `o`로 열기, `f`로 깃발을 놓거나
 회수합니다. 승리·패배 후 `n`으로 새 판을 시작할 수 있습니다. 자동 플레이는

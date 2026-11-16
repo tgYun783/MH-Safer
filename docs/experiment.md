@@ -49,13 +49,14 @@
 측정 2026-11-14, 커밋 `7a60a01`(main) 게임, `hard`·`--seed 1`·각 60초 1회, 4개 동시 실행. Docker for Mac(8코어) 위 `mh-safer-dev`. 평균 길이는 60초 ÷ 끝난 판 수로 낸 근사(진행 중 판은 무시, 200만 끝난 판 1개 = 60초 − 진행 중 판 22초)이며 **중앙값은 미측정**(게임이 판 길이를 출력하지 않음).
 → **제안: `--speed-ms 50`** (평균 ≈ 12초로 기준에 가장 가까운 최소값). 판 길이 분포는 S2-06 이후 주소 로그(`state_alloc`~`state_free` 간격)로 다시 확인한다.
 
-### 3.2 실행 명령 (S2-06 통합 후 확정)
+### 3.2 실행 명령 (S3-02 통합으로 확정)
 ```bash
 ./build/game/minesweeper --bot --difficulty hard --seed 1 \
-  --speed-ms <보정값> --duration-sec 600 \
-  --addr-log results/<run>/addr.jsonl --alert-log results/<run>/alerts.jsonl
+  --speed-ms 50 --duration-sec 600 \
+  --addr-log results/<run>/addr.jsonl --alert-log results/<run>/alerts.jsonl \
+  --stats results/<run>/stats.json
 ```
-`--alert-log`는 아직 없는 옵션이다(S2-06에서 게임에 붙일 예정, 이름은 통합 PR에서 확정).
+`stats.json`의 `mtd_end_count`가 오탐률 분모(§7), `alerts`는 alert 총수다. 옵션 설명은 `game/README.md` "libmtd 감시".
 
 ## 4. 변조 실험 (탐지율·지연)
 정상 플레이(§3과 같은 조건, 시드 1~5)를 돌리는 동안 주입기(`injector/`, S3)가 외부 프로세스에서 변조한다. 주소는 주소 로그(`docs/interface.md` §3.1 주입기 규칙)로만 정한다.
@@ -110,4 +111,4 @@ results/<YYYY-MM-DD>_<실험>_<시드>/
 - [x] **시나리오 라벨 형식** → **`<유형>-<변수>`**(예: `T-timer`). `docs/interface.md` §3 예시를 이 형식으로 바꿨다.
 - [x] **H 은닉형 타이밍** → 최소 버전은 **`timer` 변화 폴링**으로 구간 종료를 추정한다(`/proc/<pid>/mem`으로 `timer`를 읽어 값이 바뀐 직후에 쓴다, `tick` 주기 1초). 게임 수정은 필요 없다. 나머지 변수의 H(`flag`·`reveal` 직후)는 S3-12에서 담당(우진)이 같은 폴링 방식이나 주소 로그 확장 중에서 정한다.
 - [x] **정상 플레이 난이도** → **`hard` 하나**. 근거: 배열이 가장 크고(480바이트), 3종을 다 돌리면 실행 시간이 3배라 11-20 첫 채점 일정에 맞지 않는다. 다른 난이도는 S4에서 필요하면 추가한다.
-- [x] **봇 속도** → **`--speed-ms 50`**(§3.1). 판 길이 중앙값은 미측정이라 S3-02 후 주소 로그(`state_alloc`~`state_free` 간격)로 다시 확인하고, 중앙값이 10초 미만이면 100으로 올린다.
+- [x] **봇 속도** → **`--speed-ms 50`**(§3.1). S3-02 후 주소 로그(`state_alloc`~`state_free` 간격)로 다시 확인했다: **판 길이 중앙값 11.1초**(54판, 최소 7.6·최대 13.5초) ≥ 10초 → 50 유지. 측정 2026-11-16, PR #28 브랜치 `s3/integration`, `hard`·`--seed 1`·600초 1회, Docker for Mac 위 `mh-safer-dev`, libmtd 켬(T=50ms).

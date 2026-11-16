@@ -56,3 +56,10 @@ if(TARGET mtd_asan)
   set_tests_properties(engine_asan PROPERTIES
     ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1")
 endif()
+
+# 한계 측정: 주기 검사 사이 일시 변조(바꿨다가 되돌리기)
+add_executable(test_limits test_main.cpp test_limits.cpp)
+target_link_libraries(test_limits PRIVATE mtd)
+target_include_directories(test_limits PRIVATE ${MTD_SRC_DIR})
+target_include_directories(test_limits SYSTEM PRIVATE ${MTD_DOCTEST_DIR})
+add_test(NAME limits COMMAND test_limits)

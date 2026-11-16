@@ -1,9 +1,11 @@
 #include "minesweeper.hpp"
+#include "address_log.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -25,6 +27,7 @@ struct Options {
     std::uint32_t speed_ms = 25;
     std::uint32_t duration_seconds = 0;
     bool bot = false;
+    std::string address_log_path;
 };
 
 std::uint32_t parse_uint(const std::string &text, const char *option)
@@ -41,8 +44,8 @@ void print_help(const char *program)
 {
     std::cout << "Usage: " << program
               << " [--bot] [--difficulty easy|medium|hard] [--seed N]"
-                 " [--speed-ms N] [--duration-sec N]\n"
-                 "Interactive keys: w/a/s/d move, o open, f flag, q quit.\n"
+                 " [--speed-ms N] [--duration-sec N] [--addr-log FILE]\n"
+                 "Interactive keys: w/a/s/d move, o open, f flag, n new game, q quit.\n"
                  "Bot runs without a screen; duration-sec=0 means run until stopped.\n";
 }
 
@@ -60,12 +63,15 @@ Options parse_options(int argc, char **argv)
             continue;
         }
         if (argument == "--difficulty" || argument == "--seed" ||
-            argument == "--speed-ms" || argument == "--duration-sec") {
+            argument == "--speed-ms" || argument == "--duration-sec" ||
+            argument == "--addr-log") {
             if (i + 1 >= argc) {
                 throw std::invalid_argument("missing value for " + argument);
             }
             const std::string value{argv[++i]};
-            if (argument == "--difficulty") {
+            if (argument == "--addr-log") {
+                options.address_log_path = value;
+            } else if (argument == "--difficulty") {
                 if (!minesweeper::parse_difficulty(value.c_str(), options.difficulty)) {
                     throw std::invalid_argument("difficulty must be easy, medium, or hard");
                 }
@@ -91,14 +97,15 @@ void print_bot_summary(std::uint64_t completed_games,
               << " timer=" << game.state().timer_seconds << "s\n";
 }
 
-int run_bot(const Options &options)
+int run_bot(const Options &options, minesweeper::StateObserver observer)
 {
     const auto config = minesweeper::config_for(options.difficulty);
     minesweeper::Bot bot{options.seed ^ 0x9e3779b9u};
     std::uint64_t completed_games = 0;
     std::uint64_t lost_games = 0;
     std::uint32_t game_seed = options.seed;
-    auto game = std::make_unique<Game>(config, game_seed);
+    auto game = std::make_unique<Game>(config, game_seed,
+                                       minesweeper::StateAllocator{}, observer);
     const auto started_at = std::chrono::steady_clock::now();
     auto next_tick = started_at + std::chrono::seconds(1);
     auto next_status = started_at + std::chrono::seconds(10);
@@ -119,7 +126,8 @@ int run_bot(const Options &options)
                 ++lost_games;
             }
             ++game_seed;
-            game = std::make_unique<Game>(config, game_seed);
+            game = std::make_unique<Game>(config, game_seed,
+                                          minesweeper::StateAllocator{}, observer);
             continue;
         }
 
@@ -151,7 +159,10 @@ void draw(const Game &game, std::uint32_t cursor_row, std::uint32_t cursor_colum
             const std::size_t cell =
                 static_cast<std::size_t>(row) * state.columns + column;
             char symbol = '#';
-            if (state.flagged[cell] != 0) {
+            if (state.game_state == GameStatus::lost &&
+                state.mine_field[cell] != 0) {
+                symbol = '*';
+            } else if (state.flagged[cell] != 0) {
                 symbol = 'F';
             } else if (state.cell_state[cell] != 0) {
                 const std::uint32_t adjacent = game.adjacent_mines(row, column);
@@ -168,11 +179,12 @@ void draw(const Game &game, std::uint32_t cursor_row, std::uint32_t cursor_colum
     std::cout << "w/a/s/d move | o open | f flag | q quit\n> " << std::flush;
 }
 
-int run_interactive(const Options &options)
+int run_interactive(const Options &options, minesweeper::StateObserver observer)
 {
     const auto config = minesweeper::config_for(options.difficulty);
     std::uint32_t seed = options.seed;
-    auto game = std::make_unique<Game>(config, seed);
+    auto game = std::make_unique<Game>(config, seed,
+                                       minesweeper::StateAllocator{}, observer);
     std::uint32_t cursor_row = config.rows / 2;
     std::uint32_t cursor_column = config.columns / 2;
     auto next_tick = std::chrono::steady_clock::now() + std::chrono::seconds(1);
@@ -199,11 +211,10 @@ int run_interactive(const Options &options)
         if (game->state().game_state != GameStatus::playing) {
             if (command == 'n') {
                 ++seed;
-                game = std::make_unique<Game>(config, seed);
+                game = std::make_unique<Game>(config, seed,
+                                              minesweeper::StateAllocator{}, observer);
                 next_tick = std::chrono::steady_clock::now() +
                             std::chrono::seconds(1);
-            } else if (command == 'q') {
-                return 0;
             }
             continue;
         }
@@ -239,27 +250,21 @@ int run_interactive(const Options &options)
             break;
         }
 
-        if (game->state().game_state == GameStatus::won) {
-            std::cout << "\nYou won! Press n for a new game or q to quit.\n";
+        if (game->state().game_state != GameStatus::playing) {
+            const bool won = game->state().game_state == GameStatus::won;
+            if (!won) {
+                draw(*game, cursor_row, cursor_column);
+            }
+            std::cout << (won ? "\nYou won! " : "\nBoom! ")
+                      << "Press n for a new game or q to quit.\n";
             std::string answer;
             if (!std::getline(std::cin, answer) || answer == "q") {
                 return 0;
             }
             if (answer == "n") {
                 ++seed;
-                game = std::make_unique<Game>(config, seed);
-                next_tick = std::chrono::steady_clock::now() +
-                            std::chrono::seconds(1);
-            }
-        } else if (game->state().game_state == GameStatus::lost) {
-            std::cout << "\nBoom! Press n for a new game or q to quit.\n";
-            std::string answer;
-            if (!std::getline(std::cin, answer) || answer == "q") {
-                return 0;
-            }
-            if (answer == "n") {
-                ++seed;
-                game = std::make_unique<Game>(config, seed);
+                game = std::make_unique<Game>(config, seed,
+                                              minesweeper::StateAllocator{}, observer);
                 next_tick = std::chrono::steady_clock::now() +
                             std::chrono::seconds(1);
             }
@@ -273,7 +278,26 @@ int main(int argc, char **argv)
 {
     try {
         const Options options = parse_options(argc, argv);
-        return options.bot ? run_bot(options) : run_interactive(options);
+        std::ofstream address_log;
+        std::unique_ptr<minesweeper::AddressLogger> logger;
+        minesweeper::StateObserver observer{};
+        if (!options.address_log_path.empty()) {
+            address_log.open(options.address_log_path);
+            if (!address_log) {
+                throw std::runtime_error("cannot open address log: " +
+                                         options.address_log_path);
+            }
+            logger = std::make_unique<minesweeper::AddressLogger>(address_log);
+            observer = logger->observer();
+        }
+        const int result = options.bot ? run_bot(options, observer)
+                                       : run_interactive(options, observer);
+        address_log.flush();
+        address_log.close();
+        if (logger != nullptr && (logger->failed() || !address_log)) {
+            throw std::runtime_error("failed to write address log");
+        }
+        return result;
     } catch (const std::exception &error) {
         std::cerr << "error: " << error.what() << '\n';
         return 2;

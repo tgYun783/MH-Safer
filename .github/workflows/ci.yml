@@ -28,3 +28,18 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # TEMP(S2-14/S3-13): 배열 비교 오버헤드 측정 1회. 수치를 docs/poc/array-compare.md에 옮긴 뒤 이 job은 지운다.
+  bench-array-compare:
+    name: TEMP bench_array_compare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 툴체인 설치
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMTD_ASAN_TESTS=OFF && cmake --build build -j --target bench_array_compare
+      - name: 환경
+        run: uname -srm; nproc; lscpu | grep -E 'Model name|^CPU\(s\)'; g++ --version | head -1
+      - name: Run
+        run: ./build/bench/bench_array_compare 10

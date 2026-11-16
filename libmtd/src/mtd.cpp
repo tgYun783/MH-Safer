@@ -33,6 +33,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -127,6 +128,7 @@ public:
         last_event_.clear();
         queue_.clear();
         rules_ = RuleSet{};
+        warned_unknown_.clear();
         for (auto &a : allocs_) page_free(a.first, a.second);
         allocs_.clear();
         running_ = false;
@@ -140,13 +142,22 @@ public:
         auto key = reinterpret_cast<std::uintptr_t>(addr);
         if (vars_.count(key) != 0) return MTD_ERR;
 
+        /* 11-16 결정(안건 1-4): 규칙에 없는 이름은 허용하되 이름마다 한 번 경고,
+         * 규칙과 크기가 맞지 않으면 거부(명백한 버그). 규칙 파일이 없으면 검사 안 함. */
+        const VarRule *rule = rules_.find(name);
+        if (rule != nullptr && !size_matches(*rule, size)) return MTD_ERR;
+        if (rule == nullptr && !rules_.empty() && warned_unknown_.insert(name).second) {
+            std::fprintf(stderr, "[libmtd] warning: no rule for watched variable \"%s\" "
+                                 "(behavior-only, rule=null)\n", name);
+        }
+
         Var v;
         v.addr = addr;
         v.size = size;
         v.name = name;
         v.shadow.resize(size);
         std::memcpy(v.shadow.data(), addr, size);
-        v.rule = rules_.find(name);
+        v.rule = rule;
         /* 이미 열린 구간 중 이 변수를 허용하는 것이 있으면 구간 안으로 등록 */
         for (const auto &w : windows_) {
             if (matches(v, w.tag.c_str())) {
@@ -253,6 +264,14 @@ public:
     }
 
 private:
+    /* mtd_watch 크기가 규칙의 value와 맞는가. 스칼라는 value.size(0이면 미지정),
+     * 배열은 요소 크기의 배수(개수는 난이도별 런타임 결정이라 보지 않는다). */
+    static bool size_matches(const VarRule &r, std::size_t size)
+    {
+        if (r.value.is_array) return r.value.element_size == 0 || size % r.value.element_size == 0;
+        return r.value.size == 0 || size == r.value.size;
+    }
+
     /* 이 tag 구간이 변수 v의 변화를 합법으로 만드는가 */
     static bool matches(const Var &v, const char *tag)
     {
@@ -400,6 +419,7 @@ private:
     mtd_config                               cfg_{};
     unsigned                                 period_ms_ = MTD_DEFAULT_PERIOD_MS;
     RuleSet                                  rules_;
+    std::unordered_set<std::string>          warned_unknown_;  /* 규칙 없는 이름 경고는 한 번만 */
     PredictFn                                predict_ = &check_prediction;
     std::unordered_map<std::uintptr_t, Var>  vars_;
     std::vector<Window>                      windows_;

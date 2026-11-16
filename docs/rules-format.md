@@ -93,6 +93,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - 값은 변수별 `event_window_ms`, null이면 `default_event_window_ms`(50). 파서가 채워서 `BehaviorSpec::event_window_ms`에 넣는다(엔진은 0을 받지 않는다고 가정).
 
 **규칙 없는 변수**: 규칙 파일이 없거나 변수 이름이 규칙에 없으면 **어느 구간이든 합법**(tag 무관), 구간 밖 변화만 behavior alert(`rule=null`), 예측 검사 없음.
+- `mtd_watch` 검사(11-16 회의 결정, 안건 1-4): 규칙 파일이 있는데 이름이 규칙에 없으면 **등록은 허용**하고 stderr에 이름마다 한 번 경고한다(오타로 규칙이 조용히 빠지는 것을 드러내되, 규칙 없이 감시만 붙이는 이식 사용(T4)은 막지 않음). 이름은 있는데 크기가 규칙과 다르면 **`MTD_ERR`로 거부**한다(스칼라는 `value.size`, 배열은 요소 크기의 배수 — 개수는 런타임 결정이라 보지 않음).
 
 **mtd_end 예측 검사 계약**: 구간 안에서 값이 바뀐 변수만, 엔진 락을 잡은 채로 `check_prediction(rule, before=섀도, after=실제값, size)`를 1회 호출. 배열은 같은 포인터로 요소별 비교(배열 섀도 접근). `ok=false`면 prediction alert 1건(`rule=rule_id`). 반환 후 섀도는 실제값으로 동기화(ack). 같은 변화가 required_event 위반이면 behavior와 prediction alert가 둘 다 날 수 있다.
 

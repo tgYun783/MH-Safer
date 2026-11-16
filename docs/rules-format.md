@@ -81,7 +81,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## S2-13 결정 (2026-11-13, 우진 제안 · 전유정 승인은 PR 리뷰로)
-내부 인터페이스는 `libmtd/src/rules.hpp`(규칙 조회 `RuleSet::find`)와 `libmtd/src/prediction.hpp`(`mtd_end`의 예측 검사 `check_prediction`). 파서·예측 검사는 stub(`rules_stub.cpp`·`prediction_stub.cpp`)으로 시작하고 S2-21·S2-22가 교체한다.
+내부 인터페이스는 `libmtd/src/rules.hpp`(규칙 조회 `RuleSet::find`)와 `libmtd/src/prediction.hpp`(`mtd_end`의 예측 검사 `check_prediction`). 파서는 `rules_parser.cpp`(S2-21), 예측 검사는 `prediction.cpp`(S2-22)가 구현한다(처음 stub은 교체됨).
 
 **required_event = 구간 게이트**
 - 구간 밖 변화: 사건이 있었든 없었든 behavior alert(`rule="allowed_in_tags"`, `mutable=false`면 `"immutable"`).
@@ -99,4 +99,12 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 
 ## 미정 요약
 - 배열 count: 난이도별 런타임 결정(null). 나머지 자료형·크기·enum 코드는 11-11 승인.
-- cell_state per_element_monotonic 실제 검사 알고리즘: 바이트 비교로 결정됨, 구현은 S2(미구현).
+- ~~cell_state per_element_monotonic 실제 검사 알고리즘~~ → S2-22 구현: 바뀐 요소마다 `element_size` 단위로 비교, `open_only`는 닫힘(0) → 열림(≠0)만 허용.
+
+## 파서 검증 규칙 (S2-21)
+스키마 v0 필드가 모두 있어야 한다(null 허용 필드: `count`·`required_event`·`event_window_ms`). 아래 중 하나라도 어기면 `load_rules` 실패 → `mtd_init`이 `MTD_ERR`.
+- `schema_version`은 `"0"`, `variables`는 비어 있지 않은 배열, 변수 이름 중복 금지
+- 스칼라: `size` ∈ {1,2,4,8}, `compare="value"`, `encoding`은 `int`(signed=true)·`uint`(signed=false)·`enum`(unsigned, `states`·`codes` 길이 같음, 코드가 크기에 들어감)
+- 배열: `element_size` ∈ {1,2,4,8}, `count`는 양수 또는 null, `compare="bytes"`, `encoding="uint"`
+- `mutable=false`면 `allowed_in_tags`는 비어 있어야 한다. `event_window_ms`(null이면 기본값)와 `default_event_window_ms`는 양수
+- 규칙과 자료형 짝: `delta_eq`·`delta_in`·`monotonic`·`enum_transition`은 스칼라, `per_element_monotonic`은 배열(`open_only`는 `element_size=1`), `enum_transition`은 `encoding="enum"`이고 전이쌍의 상태 이름이 `enum.states`에 있어야 한다

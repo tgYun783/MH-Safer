@@ -49,9 +49,19 @@ struct GameState {
     std::array<std::uint8_t, max_cells> flagged{};
 };
 
+struct StateObserver {
+    void *user = nullptr;
+    void (*state_alloc)(void *, const GameState *) = nullptr;
+    void (*field_watch)(void *, const GameState *) = nullptr;
+    void (*state_free)(void *, const GameState *) = nullptr;
+};
+
 class Game {
 public:
-    Game(Config config, std::uint32_t seed, StateAllocator allocator = {});
+    Game(Config config,
+         std::uint32_t seed,
+         StateAllocator allocator = {},
+         StateObserver observer = {});
     ~Game();
 
     Game(const Game &) = delete;
@@ -69,13 +79,14 @@ public:
 private:
     GameState *state_;
     StateAllocator allocator_;
+    StateObserver observer_;
     std::mt19937 random_;
 
     bool in_bounds(std::uint32_t row, std::uint32_t column) const;
     std::size_t index(std::uint32_t row, std::uint32_t column) const;
     void place_mines(std::size_t safe_index);
     void reveal(std::size_t first_index);
-    void update_status();
+    void update_status(bool mine_hit);
 };
 
 class Bot {

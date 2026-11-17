@@ -7,7 +7,7 @@
  *                다르면 behavior alert 후 섀도 = 실제값(ack, 변화 1건당 alert 1건).
  *   mtd_begin    tag가 허용된 변수를 '구간 안'으로. 들어가기 직전에 섀도와 다르면
  *                (지난 검사 이후 구간 밖에서 바뀐 것) behavior alert.
- *   mtd_end      구간 안에서 바뀐 변수마다 required_event 게이트 → 예측 검사 → 섀도 동기화.
+ *   mtd_end      구간 안에서 바뀐 변수마다 required_event 게이트 → 예측·일관성 검사 → 섀도 동기화.
  *                여기서 난 alert는 큐에 넣고 검사 스레드가 전달한다(콜백은 항상 검사 스레드 문맥).
  *
  * 메모리 안전: 감시 주소는 락을 잡은 상태에서만 읽는다. mtd_unwatch는 같은 락으로
@@ -100,6 +100,7 @@ public:
         windows_.clear();
         last_event_.clear();
         queue_.clear();
+        warned_consistency_.clear();
         stop_ = false;
         th_ = std::thread([this] { run(); });
         running_ = true;
@@ -129,6 +130,7 @@ public:
         queue_.clear();
         rules_ = RuleSet{};
         warned_unknown_.clear();
+        warned_consistency_.clear();
         for (auto &a : allocs_) page_free(a.first, a.second);
         allocs_.clear();
         running_ = false;
@@ -317,6 +319,66 @@ private:
             }
         }
         std::memcpy(v.shadow.data(), scratch_.data(), v.size);
+        alerted |= check_consistency(v, ns);
+        return alerted;
+    }
+
+    /* 이름으로 감시 변수 하나를 찾는다(처음 찾은 것). 한계: 같은 이름이 동시에 여러 개 감시되면
+     * (상태 구조체 여러 개를 함께 감시하는 프로그램) 다른 인스턴스의 값을 읽을 수 있다.
+     * 지뢰찾기는 새 판 전에 이전 판을 해제하므로 해당 없다. */
+    Var *find_var(const std::string &name)
+    {
+        for (auto &entry : vars_) {
+            if (entry.second.name == name) return &entry.second;
+        }
+        return nullptr;
+    }
+
+    static bool read_scalar(const Var &v, std::uint64_t &value)
+    {
+        if (v.size == 0 || v.size > sizeof(std::uint64_t)) return false;
+        std::uint8_t bytes[sizeof(std::uint64_t)]{};
+        std::memcpy(bytes, v.addr, v.size);
+        value = to_u64(bytes, v.size);
+        return true;
+    }
+
+    bool check_consistency(const Var &changed, std::uint64_t ns)
+    {
+        bool alerted = false;
+        for (const ConsistencyRule &rule : rules_.consistency()) {
+            if (rule.when_variable != changed.name) continue;
+            Var *require = find_var(rule.require_variable);
+            Var *equals = find_var(rule.equals_variable);
+            std::uint64_t when_value = 0, require_value = 0, equals_value = 0;
+            if (require == nullptr || equals == nullptr ||
+                !read_scalar(changed, when_value) ||
+                !read_scalar(*require, require_value) ||
+                !read_scalar(*equals, equals_value)) {
+                if (warned_consistency_.insert(rule.name).second) {
+                    std::fprintf(stderr,
+                                 "[libmtd] warning: consistency rule \"%s\" skipped "
+                                 "(required variable is not watched as a scalar)\n",
+                                 rule.name.c_str());
+                }
+                continue;
+            }
+            const ConsistencyResult result =
+                mtd::detail::check_consistency(rule, when_value, require_value, equals_value);
+            if (result.ok) continue;
+            PendingAlert alert;
+            /* name = when 변수(변조로 바뀐 쪽, 예: game_state). 정답 라벨 name과 같은 키라
+             * 채점기가 위조 라벨과 이 alert를 묶는다(PM 결정 11-17, interface.md §7). */
+            alert.name = rule.when_variable;
+            alert.kind = MTD_KIND_PREDICTION;
+            alert.rule = rule.name.c_str();
+            alert.expected = result.expected;
+            alert.actual = result.actual;
+            alert.detect_ns = ns;
+            alert.scalar = true;
+            queue_.push_back(std::move(alert));
+            alerted = true;
+        }
         return alerted;
     }
 
@@ -420,6 +482,7 @@ private:
     unsigned                                 period_ms_ = MTD_DEFAULT_PERIOD_MS;
     RuleSet                                  rules_;
     std::unordered_set<std::string>          warned_unknown_;  /* 규칙 없는 이름 경고는 한 번만 */
+    std::unordered_set<std::string>          warned_consistency_;
     PredictFn                                predict_ = &check_prediction;
     std::unordered_map<std::uintptr_t, Var>  vars_;
     std::vector<Window>                      windows_;

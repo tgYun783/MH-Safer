@@ -150,4 +150,16 @@ PredictionResult check_prediction(const VarRule &rule, const std::uint8_t *befor
     return res;
 }
 
+ConsistencyResult check_consistency(const ConsistencyRule &rule, std::uint64_t when_value,
+                                    std::uint64_t require_value, std::uint64_t equals_value) noexcept
+{
+    ConsistencyResult result;
+    result.expected = equals_value;
+    result.actual = require_value;
+    if (when_value == rule.when_equals && require_value != equals_value) {
+        result.ok = false;
+    }
+    return result;
+}
+
 }  // namespace mtd::detail

@@ -93,6 +93,14 @@
 - 탐지 지연: TP마다 `detect_ns - inject_ns`. 중앙값·p95·최대를 보고한다. 목표 판정은 **p95**로 한다(§7, 11-16).
 - 은닉형은 별도 표로 보고.
 
+채점기 실행:
+```bash
+python3 scripts/score.py --labels results/<run>/labels.jsonl \
+  --alerts results/<run>/alerts.jsonl --addr-log results/<run>/addr.jsonl \
+  --stats results/<run>/stats.json --meta results/<run>/meta.json
+```
+`score.json`을 labels 폴더에 만들고 OR·AND·behavior-only·prediction-only 결합 결과를 같은 입력으로 출력한다. AND는 같은 변수의 behavior/prediction alert를 W 안에서 한 쌍으로 묶으며, 각 alert는 한 쌍에만 쓴다.
+
 ## 6. 결과 저장
 ```
 results/<YYYY-MM-DD>_<실험>_<시드>/
@@ -113,3 +121,17 @@ results/<YYYY-MM-DD>_<실험>_<시드>/
 - [x] **H 은닉형 타이밍** → 최소 버전은 **`timer` 변화 폴링**으로 구간 종료를 추정한다(`/proc/<pid>/mem`으로 `timer`를 읽어 값이 바뀐 직후에 쓴다, `tick` 주기 1초). 게임 수정은 필요 없다. 나머지 변수의 H(`flag`·`reveal` 직후)는 S3-12에서 담당(우진)이 같은 폴링 방식이나 주소 로그 확장 중에서 정한다.
 - [x] **정상 플레이 난이도** → **`hard` 하나**. 근거: 배열이 가장 크고(480바이트), 3종을 다 돌리면 실행 시간이 3배라 11-20 첫 채점 일정에 맞지 않는다. 다른 난이도는 S4에서 필요하면 추가한다.
 - [x] **봇 속도** → **`--speed-ms 50`**(§3.1). S3-02 후 주소 로그(`state_alloc`~`state_free` 간격)로 다시 확인했다: **판 길이 중앙값 11.1초**(54판, 최소 7.6·최대 13.5초) ≥ 10초 → 50 유지. 측정 2026-11-16, PR #28 브랜치 `s3/integration`, `hard`·`--seed 1`·600초 1회, Docker for Mac 위 `mh-safer-dev`, libmtd 켬(T=50ms).
+
+## 8. 판정 결합 비교 (S3-22)
+같은 JSONL 입력에서 OR(둘 중 하나), AND(같은 이름·W 안에 behavior와 prediction 모두), behavior-only, prediction-only를 비교한다. 이는 규칙 기반 채점 비교이며 결합 모델을 실제 탐지 결과로 보정한 것은 아니다.
+
+아래 표는 단위 테스트의 **합성 데이터**(정상 실험 결과가 아님)로 계산해 결합 의미론을 확인한 예다.
+
+| 방식 | TP | FN | FP | 탐지율 |
+|---|---:|---:|---:|---:|
+| OR | 3 | 0 | 4 | 100% |
+| AND | 1 | 2 | 2 | 33.3% |
+| behavior-only | 1 | 2 | 3 | 33.3% |
+| prediction-only | 3 | 0 | 1 | 100% |
+
+실험 결과가 쌓이면 같은 입력 로그로 다시 비교해야 하며, 위 숫자를 실제 탐지율·오탐률로 인용하지 않는다.

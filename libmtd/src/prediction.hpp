@@ -32,6 +32,17 @@ PredictionResult check_prediction(const VarRule &rule,
                                   const std::uint8_t *after,
                                   std::size_t size) noexcept;
 
+struct ConsistencyResult {
+    bool        ok = true;
+    std::uint64_t expected = 0;
+    std::uint64_t actual = 0;
+};
+
+ConsistencyResult check_consistency(const ConsistencyRule &rule,
+                                    std::uint64_t when_value,
+                                    std::uint64_t require_value,
+                                    std::uint64_t equals_value) noexcept;
+
 /* 규칙 이름 → 정적 문자열 ("delta_eq" 등). none이면 nullptr. */
 const char *pred_rule_name(PredRule r) noexcept;
 

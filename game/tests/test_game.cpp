@@ -108,6 +108,7 @@ TEST_CASE("지뢰를 열면 패배한다")
 TEST_CASE("모든 안전 칸을 열면 승리한다")
 {
     minesweeper::Game game({5, 5, 5}, 11);
+    CHECK(game.state().safe_cells == 20);
     REQUIRE(game.open(0, 0));
     for (std::uint32_t row = 0; row < 5; ++row) {
         for (std::uint32_t column = 0; column < 5; ++column) {
@@ -117,7 +118,7 @@ TEST_CASE("모든 안전 칸을 열면 승리한다")
             }
         }
     }
-    CHECK(game.state().cells_opened == 20);
+    CHECK(game.state().cells_opened == game.state().safe_cells);
     CHECK(game.state().game_state == minesweeper::GameStatus::won);
 }
 
@@ -229,12 +230,13 @@ TEST_CASE("주소 로그는 상태 생성·지뢰 감시·해제 순서로 JSONL
     CHECK(records[0]["addr"] == records[1]["addr"]);
     CHECK(records[1]["addr"] == records[2]["addr"]);
     CHECK(records[0]["size"] == sizeof(minesweeper::GameState));
-    CHECK(records[0]["fields"].size() == 5);
+    CHECK(records[0]["fields"].size() == 6);
     CHECK(records[0]["fields"][0]["name"] == "timer");
     CHECK(records[0]["fields"][1]["name"] == "mines_remaining");
     CHECK(records[0]["fields"][2]["name"] == "cell_state");
     CHECK(records[0]["fields"][3]["name"] == "cells_opened");
-    CHECK(records[0]["fields"][4]["name"] == "game_state");
+    CHECK(records[0]["fields"][4]["name"] == "safe_cells");
+    CHECK(records[0]["fields"][5]["name"] == "game_state");
     CHECK(records[1]["fields"].size() == 1);
     CHECK(records[1]["fields"][0]["name"] == "mine_field");
     CHECK(records[0]["ns"].get<std::uint64_t>() <=

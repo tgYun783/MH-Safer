@@ -74,6 +74,17 @@
       "prediction": { "rule": "monotonic", "params": { "direction": "non_decreasing" } }
     },
     {
+      "name": "safe_cells",
+      "value": { "type": "scalar", "size": 4, "signed": false, "encoding": "uint", "compare": "value" },
+      "behavior": {
+        "mutable": false,
+        "allowed_in_tags": [],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": { "rule": "immutable", "params": {} }
+    },
+    {
       "name": "game_state",
       "value": {
         "type": "scalar", "size": 4, "signed": false, "encoding": "enum", "compare": "value",
@@ -91,6 +102,16 @@
           "allowed": [["playing", "won"], ["playing", "lost"]],
           "note": "승리 정당성(모든 안전 칸 오픈)은 변수 간 일관성 검사 — 섀도 값 비교 단독으로는 불가. cells_opened 교차검사 필요, 미정(S1-24/L4)."
         }
+      }
+    }
+  ],
+  "consistency": [
+    {
+      "name": "won_requires_all_safe_cells_open",
+      "when": { "variable": "game_state", "equals": "won" },
+      "require": {
+        "variable": "cells_opened",
+        "equals": { "variable": "safe_cells" }
       }
     }
   ]

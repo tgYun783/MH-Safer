@@ -33,13 +33,13 @@ cmake --build build -j
 
 | 훅 | libmtd |
 |---|---|
-| `state_alloc` | `mtd_watch` 5개(`mine_field` 제외) → 주소 로그 `state_alloc` |
+| `state_alloc` | `mtd_watch` 6개(`mine_field` 제외, `safe_cells` 포함) → 주소 로그 `state_alloc` |
 | `field_watch` | `mtd_watch(mine_field)` → 주소 로그 `field_watch` |
 | `state_free` | 주소 로그 `state_free` → `mtd_unwatch` (메모리 해제 전) |
 | `scope_begin`/`scope_end` | `mtd_begin`/`mtd_end`: `tick`(timer), `flag`(mines_remaining), `reveal`(cell_state·cells_opened), `win-check`(game_state) |
 | `event` | `mtd_event("input")`: `open()` 진입 시, `reveal` 구간 직전 |
 
-새 판은 이전 판을 먼저 해제한 뒤 만듭니다. 그래서 감시 수는 배치 전 5개, 배치 후 6개를 넘지 않습니다.
+새 판은 이전 판을 먼저 해제한 뒤 만듭니다. 그래서 감시 수는 배치 전 6개, 배치 후 7개를 넘지 않습니다.
 
 대화형 조작은 `w/a/s/d`로 이동하고 `o`로 열기, `f`로 깃발을 놓거나
 회수합니다. 승리·패배 후 `n`으로 새 판을 시작할 수 있습니다. 자동 플레이는
@@ -55,7 +55,7 @@ cmake --build build -j
 
 - **상태 수명 지점(완료)**: 판마다 `GameState`를 새로 할당하는 구조는 유지한다.
   수명 지점(생성 직후·지뢰 배치 직후·해제 직전)마다 같은 주소 정보를 libmtd와 주입기 양쪽에 넘긴다.
-  - 생성 직후: `mine_field`를 뺀 5개 `mtd_watch` → `--addr-log`에 `state_alloc` 기록
+  - 생성 직후: `mine_field`를 뺀 6개(`safe_cells` 포함) `mtd_watch` → `--addr-log`에 `state_alloc` 기록
   - 지뢰 배치 직후(첫 클릭): `mine_field` `mtd_watch` → `field_watch` 기록
   - 해제 직전: `state_free` 기록 → 감시 중인 변수 `mtd_unwatch` → 메모리 해제
   - 로그 형식·순서는 `docs/interface.md` §3.1, API는 `docs/monitoring-design.md` §3·§8.

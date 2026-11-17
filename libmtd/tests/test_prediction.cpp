@@ -166,6 +166,18 @@ TEST_CASE("enum_transition: 허용 안 된 전이는 위반 (won→playing, lost
     CHECK(violated(check<std::uint32_t>(r, 0, 7), "enum_transition"));
 }
 
+TEST_CASE("변수 간 일관성: when 조건이 참일 때 require와 기준 변수가 달라지면 위반")
+{
+    ConsistencyRule rule{"won_requires_all_safe_cells_open", "game_state", 1,
+                         "cells_opened", "safe_cells"};
+    CHECK(check_consistency(rule, 0, 10, 20).ok);
+    CHECK(check_consistency(rule, 1, 20, 20).ok);
+    const auto result = check_consistency(rule, 1, 10, 20);
+    CHECK_FALSE(result.ok);
+    CHECK(result.expected == 20);
+    CHECK(result.actual == 10);
+}
+
 TEST_CASE("스칼라 규칙인데 크기가 다르면 위반 (해석 불가)")
 {
     auto r = scalar(PredRule::delta_eq, 4);
@@ -265,12 +277,18 @@ TEST_CASE("엔진: game_state — win-check 안 playing→won은 alert 0, won→
 {
     Engine e;
     std::uint32_t state = 0;
+    std::uint32_t opened = 0;
+    std::uint32_t safe = 0;
+    REQUIRE(mtd_watch(&opened, sizeof opened, "cells_opened") == MTD_OK);
+    REQUIRE(mtd_watch(&safe, sizeof safe, "safe_cells") == MTD_OK);
     REQUIRE(mtd_watch(&state, sizeof state, "game_state") == MTD_OK);
     { mtd::Scope s{"win-check"}; state = 1; }
     e.expect_none();
     { mtd::Scope s{"win-check"}; state = 0; }
     e.expect_prediction("game_state", "enum_transition");
     mtd_unwatch(&state);
+    mtd_unwatch(&safe);
+    mtd_unwatch(&opened);
 }
 
 TEST_CASE("엔진: immutable — 허용 구간 안에서 바뀌면 prediction immutable 1, 안 바뀌면 0")

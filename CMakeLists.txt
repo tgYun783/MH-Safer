@@ -24,7 +24,7 @@ add_subdirectory(third_party)   # 헤더 전용 벤더링 확인 (S2-08)
 add_subdirectory(libmtd)
 add_subdirectory(game)
 add_subdirectory(injector)  # T2 변조 주입기 (S3-11)
+add_subdirectory(bench)     # T5 자원 측정 (S2-14 bench_array_compare부터)
 
 # S1-01 이후 채워지는 골격 (현재 비어 있음):
-#   bench/    T5 자원 측정
 #   examples/ T4 이식성 검증용 두 번째 앱

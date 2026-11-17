@@ -62,7 +62,7 @@
 | S3-07 | **완료** (11-16) | #21 병합, §7 PM 결정 |
 | S3-08 | **완료** (11-16) | 전유정 사후 리뷰 코멘트: #12·#13·#28·#30 모두 "문제 없음" 게시 |
 | S3-11 | **완료** (11-17) | PR #34 병합. 실제 게임(hard·시드 1·`--speed-ms 50`)에 `T-timer` 100건: 라벨 100, 해제된 주소 쓰기 0, 쓰기 실패 0, 순서 위반 0, 판 교체 3판, W=200ms 안 탐지 100/100 (Docker, 11-17) |
-| S3-13 | 대기 | #14 base를 `main`으로 바꿈, 수치 미측정 |
+| S3-13 | **완료** (11-17) | PR #14 병합. `docs/poc/array-compare.md` 수치 기입("미측정" 없음): 480B 검사 13.3ns, 게임 구성 검사 CPU 0.04%(GitHub Actions 1회) |
 | S3-21 | **완료** (11-17) | PR #35. `scripts/score.py`, JSONL stale/TP/FN/FP·지표·결합 비교, 손 작성 로그 테스트(ctest `score`). 일관성 alert `name` = `when.variable`(PM 결정 11-17, `interface.md` §7) 반영 |
 | S3-22 | **완료** (11-17) | PR #35. OR·AND·behavior-only·prediction-only 같은 데이터 비교와 합성 데이터 표(`docs/experiment.md` §8). 실제 변조 데이터 비교는 S3-03 이후 |
 | S3-23 | **완료** (11-17) | PR #35. `safe_cells` 불변 감시 변수와 규칙 기반 일관성 검사. 정상 승리 alert 0, 승리 위조 prediction alert 1(`test_game_mtd`). ctest 전체 통과(Docker·CI) |

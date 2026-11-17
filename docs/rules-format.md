@@ -79,7 +79,7 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 - [x] required_event의 정확한 의미론 → **구간 게이트만**(S2-13). 비동기 수용 조건으로 쓰지 않는다. 아래 "S2-13 결정" 절.
 - [x] event_window_ms를 검사 주기 T와 연동할지 → **고정**(규칙 파일 값, 주기와 무관). 아래 "S2-13 결정" 절.
 - [x] 자료형·크기·enum 코드값 → PR #10 구현값으로 **승인**(11-11): timer `uint32`, mines_remaining `int32`, game_state 코드 `[0,1,2]`(playing/won/lost), 배열은 `uint8`(지뢰=1, 열림=1) 최대 30×16칸. 배열 count는 난이도별 런타임 결정이라 null 유지.
-- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용하고, 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. S3-23에서 `open()`의 승패 대입을 `win-check`로 분리했다.
+- [x] game_state의 `lost` 전환 태그 → **게임 코드에서 판정 분리**(11-11 결정). 규칙은 `win-check`만 허용하고, 칸 열기는 `reveal` 구간, 승패 대입(lost/won)은 `win-check` 구간으로 감싼다. 합법 구간이 좁아져 reveal 중 승리 위조를 행위 탐지로 잡을 수 있다. 승패 대입은 `set_status()`에서 `win-check` 구간으로 감싸 이미 분리돼 있다(S3-02 통합 시점).
 - [x] 변수 이름 키 표준 → **현재 이름으로 확정**(11-11): `timer`, `mines_remaining`, `mine_field`, `cell_state`, `cells_opened`, `game_state` (snake_case English). `mtd_watch` 이름·alert `name`·정답 라벨 `name`·주소 로그 `fields[].name`의 공통 키.
 
 ## S2-13 결정 (2026-11-13, 우진 제안 · 전유정 승인은 PR 리뷰로)
@@ -133,4 +133,4 @@ libmtd 코어에는 게임 지식을 넣지 않는다(plan.md §2). 파싱은 nl
 `when`이 참일 때 `require`를 검사한다. `require.equals.variable`은 규칙 파일에 선언된 unsigned scalar를 참조한다. 임의 산술식·코드는 지원하지 않는다.
 
 **채택한 것**: 최상위 `consistency` 절과 `when`/`require` 구조.
-**S3-23 결정**: (1) 게임이 `safe_cells`를 불변 감시 변수로 등록한다. 공개 API와 게임 지식 없는 libmtd 구조는 유지한다. (2) `when.variable`이 바뀐 `mtd_end`에서 검사한다. (3) 위반은 `kind="prediction"`, `rule`은 consistency 이름, alert의 `name`은 `require.variable`; `expected`는 equals 변수, `actual`은 require 변수 값이다. (4) 표현식 대신 다른 unsigned scalar 변수 참조만 허용한다.
+**S3-23 결정**: (1) 게임이 `safe_cells`를 불변 감시 변수로 등록한다. 공개 API와 게임 지식 없는 libmtd 구조는 유지한다. (2) `when.variable`이 바뀐 `mtd_end`에서 검사한다. (3) 위반은 `kind="prediction"`, `rule`은 consistency 이름, alert의 `name`은 `when.variable`(PM 결정 11-17, 정답 라벨과 같은 키 — `interface.md` §7); `expected`는 equals 변수, `actual`은 require 변수 값이다. (4) 표현식 대신 다른 unsigned scalar 변수 참조만 허용한다.

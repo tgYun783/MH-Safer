@@ -173,7 +173,7 @@ TEST_CASE("S3-23: 안전 칸을 덜 연 승리 위조는 consistency prediction 
 
     const auto lines = read_lines(alert_log);
     REQUIRE(lines.size() == 1);
-    CHECK(contains(lines[0], "\"name\":\"cells_opened\""));
+    CHECK(contains(lines[0], "\"name\":\"game_state\""));  // 라벨 V-game_state와 같은 키
     CHECK(contains(lines[0], "\"kind\":\"prediction\""));
     CHECK(contains(lines[0], "\"rule\":\"won_requires_all_safe_cells_open\""));
     CHECK(contains(lines[0], "\"expected\":\"0x47\""));

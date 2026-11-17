@@ -61,11 +61,11 @@
 | S3-06 | **완료** (11-16) | `main` 보호에 CI 필수 체크 `build + ctest (Ubuntu, g++)` 추가. 관리자 예외는 유지 |
 | S3-07 | **완료** (11-16) | #21 병합, §7 PM 결정 |
 | S3-08 | **완료** (11-16) | 전유정 사후 리뷰 코멘트: #12·#13·#28·#30 모두 "문제 없음" 게시 |
-| S3-11 | 시작 가능 | 주소 로그(#23)가 `main`에 있음 |
+| S3-11 | **완료** (11-17) | PR #34 병합. 실제 게임(hard·시드 1·`--speed-ms 50`)에 `T-timer` 100건: 라벨 100, 해제된 주소 쓰기 0, 쓰기 실패 0, 순서 위반 0, 판 교체 3판, W=200ms 안 탐지 100/100 (Docker, 11-17) |
 | S3-13 | 대기 | #14 base를 `main`으로 바꿈, 수치 미측정 |
-| S3-21 | 구현 완료(브랜치), CI 대기 | `scripts/score.py`, JSONL stale/TP/FN/FP·지표·결합 비교, 손 작성 로그 테스트 7개. Python 테스트 통과; Docker 미설치로 전체 빌드/ctest 미확인 |
-| S3-22 | 구현 완료(브랜치), CI 대기 | OR·AND·behavior-only·prediction-only 같은 데이터 비교와 합성 데이터 표(`docs/experiment.md` §8). Python 테스트 통과 |
-| S3-23 | 구현·테스트 작성(브랜치), CI 대기 | `safe_cells` 불변 감시 변수와 규칙 기반 일관성 검사. 정상 승리/위조 승리 C++ 통합 테스트 추가; Docker 미설치로 미실행 |
+| S3-21 | **완료** (11-17) | PR #35. `scripts/score.py`, JSONL stale/TP/FN/FP·지표·결합 비교, 손 작성 로그 테스트(ctest `score`). 일관성 alert `name` = `when.variable`(PM 결정 11-17, `interface.md` §7) 반영 |
+| S3-22 | **완료** (11-17) | PR #35. OR·AND·behavior-only·prediction-only 같은 데이터 비교와 합성 데이터 표(`docs/experiment.md` §8). 실제 변조 데이터 비교는 S3-03 이후 |
+| S3-23 | **완료** (11-17) | PR #35. `safe_cells` 불변 감시 변수와 규칙 기반 일관성 검사. 정상 승리 alert 0, 승리 위조 prediction alert 1(`test_game_mtd`). ctest 전체 통과(Docker·CI) |
 | S3-24 | 기존 코드에서 구현됨, 수동 확인 대기 | `--help`의 `n`, 게임 종료 처리, 패배 시 지뢰 표시는 이미 존재. 환경에 실행 바이너리가 없어 사람 플레이 미확인 |
 
 - #12·#13·#23·#24·#26·#28·#30은 리뷰 없이 관리자 병합(`sprint-2.md` 결과 절 참고). S3-08 전유정 사후 리뷰 코멘트는 #12·#13·#28·#30에 게시 완료; #23·#24·#26은 별도 사후 리뷰 대상.

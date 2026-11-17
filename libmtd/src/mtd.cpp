@@ -323,6 +323,9 @@ private:
         return alerted;
     }
 
+    /* 이름으로 감시 변수 하나를 찾는다(처음 찾은 것). 한계: 같은 이름이 동시에 여러 개 감시되면
+     * (상태 구조체 여러 개를 함께 감시하는 프로그램) 다른 인스턴스의 값을 읽을 수 있다.
+     * 지뢰찾기는 새 판 전에 이전 판을 해제하므로 해당 없다. */
     Var *find_var(const std::string &name)
     {
         for (auto &entry : vars_) {
@@ -364,7 +367,9 @@ private:
                 mtd::detail::check_consistency(rule, when_value, require_value, equals_value);
             if (result.ok) continue;
             PendingAlert alert;
-            alert.name = rule.require_variable;
+            /* name = when 변수(변조로 바뀐 쪽, 예: game_state). 정답 라벨 name과 같은 키라
+             * 채점기가 위조 라벨과 이 alert를 묶는다(PM 결정 11-17, interface.md §7). */
+            alert.name = rule.when_variable;
             alert.kind = MTD_KIND_PREDICTION;
             alert.rule = rule.name.c_str();
             alert.expected = result.expected;

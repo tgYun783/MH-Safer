@@ -154,6 +154,19 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(result["counts"]["stale"], 1)
         self.assertEqual(result["counts"]["hidden_tp"], 1)
 
+    def test_consistency_alert_matches_forged_win_label(self):
+        # 일관성 alert name = when.variable(game_state)이라 V-game_state 라벨과 묶인다 (interface.md §7)
+        result = score(
+            [label(300, "game_state", "0x1008")],
+            [{**alert(400, "game_state", "prediction"),
+              "rule": "won_requires_all_safe_cells_open", "expected": "0x47", "actual": "0x5"}],
+            addresses(),
+            window_ms=1,
+        )
+        self.assertEqual(result["counts"]["tp"], 1)
+        self.assertEqual(result["counts"]["fn"], 0)
+        self.assertEqual(result["counts"]["fp"], 0)
+
     def test_cli_writes_score_json_and_reads_scope_denominator(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

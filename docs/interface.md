@@ -124,6 +124,7 @@ PoC(섀도 주력) 반영:
 
 ## 7. 변수 간 일관성 alert (S3-23)
 - 일관성 규칙 위반은 `kind="prediction"`, `rule`은 consistency 규칙의 `name`으로 기록한다.
-- alert `name`은 `require.variable`, `expected`는 `require.equals.variable`의 실제값, `actual`은 `require.variable`의 실제값이다. 예: `cells_opened`가 `safe_cells`와 다르면 두 수치를 함께 기록한다.
+- alert `name`은 `when.variable`(예: `game_state`), `expected`는 `require.equals.variable`의 실제값, `actual`은 `require.variable`의 실제값이다. 예: 승리인데 `cells_opened`가 `safe_cells`와 다르면 `name=game_state`, `expected`=`safe_cells`, `actual`=`cells_opened`.
+  - **PM 결정(2026-11-17)**: 처음 구현은 `name`을 `require.variable`(`cells_opened`)로 했으나, 승리 위조 라벨은 `name=game_state`(`V-game_state`)라 채점(§4, `name`으로 묶음)에서 위조 1건이 FN 1 + FP 1로 집계됐다. 변조로 바뀐 쪽인 `when.variable`을 `name`으로 쓴다.
 - 일관성은 `when.variable`이 바뀐 `mtd_end`에서 검사한다. 필요한 변수가 감시되지 않았거나 스칼라가 아니면 규칙을 건너뛰고 규칙별 stderr 경고를 한 번 낸다.
 - 한 라벨의 지연은 매칭 alert 중 가장 이른 alert로 계산한다. AND 결합에서는 쌍의 두 alert가 모두 라벨의 W 안에 있어야 검출로 보고, 지연은 더 늦은 alert 시각을 기준으로 한다.

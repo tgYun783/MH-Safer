@@ -1,0 +1,127 @@
+{
+  "window_ms": 200,
+  "counts": {
+    "tp": 0,
+    "fn": 0,
+    "fp": 0,
+    "stale": 0,
+    "hidden_labels": 0,
+    "hidden_tp": 0
+  },
+  "rates": {
+    "detection_rate": null,
+    "false_positive_rate": 0.0,
+    "false_positives_per_10min": 0.0
+  },
+  "latency_ns": {
+    "median": null,
+    "p95": null,
+    "max": null
+  },
+  "by_kind": {
+    "behavior": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    },
+    "prediction": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    }
+  },
+  "fusion_comparison": {
+    "OR": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    },
+    "AND": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    },
+    "behavior_only": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    },
+    "prediction_only": {
+      "tp": 0,
+      "fn": 0,
+      "fp": 0,
+      "stale": 0,
+      "hidden_labels": 0,
+      "hidden_tp": 0,
+      "hidden_detection_rate": null,
+      "detection_rate": null,
+      "false_positive_rate": 0.0,
+      "false_positives_per_10min": 0.0,
+      "latency_ns": {
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    }
+  }
+}

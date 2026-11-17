@@ -1,6 +1,6 @@
 # 인터페이스 규격 (S1-04, v0)
 
-**상태** 2026-11-09 작성 · **v1 확정** 2026-11-11 (`mtd.h` v1과 함께) · 열린 질문(§6)은 S3에서 결정
+**상태** 2026-11-09 작성 · **v1 확정** 2026-11-11 (`mtd.h` v1과 함께) · S3 채점·일관성 결정은 §6~§7
 **짝 문서** `libmtd/include/mtd.h` (공개 API), `docs/monitoring-design.md` (감시 엔진 설계)
 
 모듈 4개(감시 라이브러리 L·게임 T1·주입기 T2·평가 T3)가 공유하는 데이터 형식을 정의한다.
@@ -29,6 +29,7 @@
 | 남은 지뢰 | 구간 `"flag"` |
 | 칸 상태 / 열린 칸 수 | 사건 `"input"` 직후 구간 `"reveal"` |
 | 게임 상태 | 구간 `"win-check"` (승리·패배 모두. 칸 열기 `"reveal"`과 분리 — 11-11 결정) |
+| 승리 검사 기준(`safe_cells`) | 판 생성 때 계산 후 불변. 게임별 규칙의 일관성 검사에서 참조 |
 | 지뢰 배치 | 없음(첫 클릭 후 불변) → 어떤 변화든 행위 위반. 감시는 지뢰 배치 직후부터(§3.1 `field_watch`) |
 
 ## 2. 판정(alert) 로그 형식
@@ -70,7 +71,7 @@
 감시 메모리는 재할당될 수 있다(지뢰찾기는 판마다 `GameState`를 새로 할당). 게임은 테스트 옵션 `--addr-log <파일>`을 주면 수명 지점마다 JSONL 1줄을 남기고, 주입기는 이 로그로 대상 주소를 정한다. 메모리 스캔은 하지 않는다.
 
 ```json
-{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1472,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"cell_state","offset":488,"size":480},{"name":"cells_opened","offset":968,"size":4},{"name":"game_state","offset":972,"size":4}]}
+{"ns":120000000,"event":"state_alloc","addr":"0x55d0c3a1e2a0","size":1476,"fields":[{"name":"timer","offset":0,"size":4},{"name":"mines_remaining","offset":4,"size":4},{"name":"cell_state","offset":488,"size":480},{"name":"cells_opened","offset":968,"size":4},{"name":"safe_cells","offset":972,"size":4},{"name":"game_state","offset":976,"size":4}]}
 {"ns":120100000,"event":"field_watch","addr":"0x55d0c3a1e2a0","fields":[{"name":"mine_field","offset":8,"size":480}]}
 {"ns":125000000,"event":"state_free","addr":"0x55d0c3a1e2a0"}
 ```
@@ -95,9 +96,9 @@
 
 - **참 양성(TP)**: 라벨 1건에 대해, 같은 `name`의 alert가 `inject_ns ≤ detect_ns ≤ inject_ns + W` 안에 **하나 이상** 존재
 - **거짓 음성(FN)**: 라벨에 매칭 alert 없음
-- **거짓 양성(FP)**: 어떤 라벨과도 매칭 안 되는 alert (정상 변경을 때린 것)
+- **거짓 양성(FP)**: 어느 유효(비-stale) 라벨의 탐지 윈도우와도 매칭되지 않은 alert (정상 변경을 때린 것)
 - **지표**:
-  - 탐지율 = TP / (`hidden=false`인 라벨 수)  — 목표 ≥ 90%
+  - 탐지율 = TP / (`hidden=false`이고 stale이 아닌 라벨 수)  — 목표 ≥ 90%
   - 오탐률 = FP / 합법 구간 수(`mtd_end` 호출 수)  — 목표 ≤ 1%. 10분당 FP 건수도 함께 보고 (11-16 PM 결정, `docs/experiment.md` §7)
   - 탐지 지연 = `detect_ns - inject_ns` 분포 — 목표 ≤ 100ms
 - 은닉형(`hidden=true`)은 탐지율에서 빼고 **별도 한계 지표**로 보고.
@@ -115,7 +116,15 @@ PoC(섀도 주력) 반영:
 - 지뢰 배치는 배치 직후부터 감시(`field_watch`)
 - 게임 상태의 `win-check` 구간이 패배 전환도 포함
 
-## 6. 열린 질문 (S3 최소 채점기에서 결정, 담당 전유정)
-- [ ] 탐지 윈도우 W(200ms)를 검사 주기와 연동할지 고정할지
-- [ ] 비스칼라 변수(지뢰 배치·칸 상태)의 `expected/actual` 표현 (해시 문자열?) — S1-05·T3와 연동
-- [ ] 한 라벨에 alert가 여럿일 때(behavior+prediction 동시) 채점 집계 방식
+## 6. 결정 (S3-21, 2026-11-16)
+- [x] 탐지 윈도우 W는 검사 주기와 분리해 **200ms로 고정**한다. 실행에서 `--window-ms`로 바꾼 경우 score 결과에 사용값을 기록한다.
+- [x] 비스칼라 변수의 `expected`/`actual`은 공통 규약대로 `null`이다. 채점기는 이 필드를 해석하지 않고 `name`·`kind`·시각만 사용한다.
+- [x] 한 라벨은 같은 `name`의 alert가 W 안에 하나 이상이면 TP **1건**이다. 매칭 alert가 여러 개여도 TP를 중복 계산하지 않고, 각각 behavior/prediction 집계에는 반영한다. 매칭된 alert는 FP가 아니다.
+- [x] stale은 주소 로그에서 해당 주소·변수의 감시 수명이 주입 시각을 포함하지 않는 라벨이다. FN 및 탐지율 분모에서 제외하고 별도로 센다. 은닉형은 별도 탐지 지표로 보고한다.
+
+## 7. 변수 간 일관성 alert (S3-23)
+- 일관성 규칙 위반은 `kind="prediction"`, `rule`은 consistency 규칙의 `name`으로 기록한다.
+- alert `name`은 `when.variable`(예: `game_state`), `expected`는 `require.equals.variable`의 실제값, `actual`은 `require.variable`의 실제값이다. 예: 승리인데 `cells_opened`가 `safe_cells`와 다르면 `name=game_state`, `expected`=`safe_cells`, `actual`=`cells_opened`.
+  - **PM 결정(2026-11-17)**: 처음 구현은 `name`을 `require.variable`(`cells_opened`)로 했으나, 승리 위조 라벨은 `name=game_state`(`V-game_state`)라 채점(§4, `name`으로 묶음)에서 위조 1건이 FN 1 + FP 1로 집계됐다. 변조로 바뀐 쪽인 `when.variable`을 `name`으로 쓴다.
+- 일관성은 `when.variable`이 바뀐 `mtd_end`에서 검사한다. 필요한 변수가 감시되지 않았거나 스칼라가 아니면 규칙을 건너뛰고 규칙별 stderr 경고를 한 번 낸다.
+- 한 라벨의 지연은 매칭 alert 중 가장 이른 alert로 계산한다. AND 결합에서는 쌍의 두 alert가 모두 라벨의 W 안에 있어야 검출로 보고, 지연은 더 늦은 alert 시각을 기준으로 한다.

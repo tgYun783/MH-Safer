@@ -15,6 +15,11 @@ add_compile_options(-Wall -Wextra -Werror)
 
 enable_testing()
 
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME score COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/test_score.py)
+endif()
+
 add_subdirectory(third_party)   # 헤더 전용 벤더링 확인 (S2-08)
 add_subdirectory(libmtd)
 add_subdirectory(game)

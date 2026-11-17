@@ -4,7 +4,7 @@
 // libmtd integration for the minesweeper game (S3-02).
 //
 // Maps the game's StateObserver hooks to libmtd:
-//   state_alloc  -> mtd_watch x5 (all but mine_field), then the next observer (address log)
+//   state_alloc  -> mtd_watch x6 (including immutable safe_cells, all but mine_field), then next observer
 //   field_watch  -> mtd_watch mine_field, then the next observer
 //   state_free   -> next observer first, then mtd_unwatch (docs/interface.md §3.1 order)
 //   scope_begin/scope_end -> mtd_begin/mtd_end, event -> mtd_event

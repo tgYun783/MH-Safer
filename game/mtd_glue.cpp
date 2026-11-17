@@ -116,6 +116,7 @@ void MtdMonitor::state_alloc_cb(void *user, const GameState *state)
     failures += mtd_watch(&s->mines_remaining, sizeof s->mines_remaining, "mines_remaining") != MTD_OK;
     failures += mtd_watch(s->cell_state.data(), sizeof s->cell_state, "cell_state") != MTD_OK;
     failures += mtd_watch(&s->cells_opened, sizeof s->cells_opened, "cells_opened") != MTD_OK;
+    failures += mtd_watch(&s->safe_cells, sizeof s->safe_cells, "safe_cells") != MTD_OK;
     failures += mtd_watch(&s->game_state, sizeof s->game_state, "game_state") != MTD_OK;
     self->watch_errors_ += static_cast<std::uint64_t>(failures);
     if (self->next_.state_alloc != nullptr) {
@@ -146,6 +147,7 @@ void MtdMonitor::state_free_cb(void *user, const GameState *state)
     mtd_unwatch(&s->mines_remaining);
     mtd_unwatch(s->cell_state.data());
     mtd_unwatch(&s->cells_opened);
+    mtd_unwatch(&s->safe_cells);
     mtd_unwatch(&s->game_state);
     if (s->mines_placed) {
         mtd_unwatch(s->mine_field.data());

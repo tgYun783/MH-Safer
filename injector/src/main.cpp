@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -49,15 +50,28 @@ int main(int argc, char **argv)
             }
             return argv[++i];
         };
-        if (a == "--pid") opt.pid = static_cast<pid_t>(std::atoi(value().c_str()));
+        /* 숫자 옵션: 잘못된 값이면 예외로 죽지 않고 사용법을 보여 준다 */
+        auto number = [&]() -> unsigned long {
+            const std::string v = value();
+            char *end = nullptr;
+            errno = 0;
+            unsigned long n = std::strtoul(v.c_str(), &end, 10);
+            if (v.empty() || v[0] == '-' || *end != '\0' || errno != 0 || n > 0xffffffffUL) {
+                std::fprintf(stderr, "invalid number for %s: %s\n", a.c_str(), v.c_str());
+                usage(argv[0]);
+                std::exit(2);
+            }
+            return n;
+        };
+        if (a == "--pid") opt.pid = static_cast<pid_t>(number());
         else if (a == "--addr-log") opt.addr_log = value();
         else if (a == "--labels") labels_path = value();
         else if (a == "--scenario") scenario = value();
-        else if (a == "--count") opt.count = static_cast<unsigned>(std::stoul(value()));
-        else if (a == "--interval-ms") opt.interval_ms = static_cast<unsigned>(std::stoul(value()));
-        else if (a == "--jitter-ms") opt.jitter_ms = static_cast<unsigned>(std::stoul(value()));
-        else if (a == "--duration-sec") opt.duration_sec = static_cast<unsigned>(std::stoul(value()));
-        else if (a == "--seed") opt.seed = static_cast<std::uint32_t>(std::stoul(value()));
+        else if (a == "--count") opt.count = static_cast<unsigned>(number());
+        else if (a == "--interval-ms") opt.interval_ms = static_cast<unsigned>(number());
+        else if (a == "--jitter-ms") opt.jitter_ms = static_cast<unsigned>(number());
+        else if (a == "--duration-sec") opt.duration_sec = static_cast<unsigned>(number());
+        else if (a == "--seed") opt.seed = static_cast<std::uint32_t>(number());
         else if (a == "--stats") stats_path = value();
         else if (a == "--no-freeze") opt.freeze = false;
         else if (a == "--verbose") opt.verbose = true;

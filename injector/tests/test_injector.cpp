@@ -213,7 +213,8 @@ TEST_CASE("S3-11 완료 기준: 실제 게임에 T-timer 100건 → 라벨 100, 
 
     MESSAGE("labels=" << r.labels << " write_errors=" << r.write_errors << " freed_writes=" << r.freed_writes
                       << " skipped=" << r.skipped << " freeze_timeouts=" << r.freeze_timeouts
-                      << " order_errors=" << r.order_errors << " bad_log_lines=" << r.bad_log_lines);
+                      << " order_errors=" << r.order_errors << " bad_log_lines=" << r.bad_log_lines
+                      << " allocs=" << r.allocs);
     CHECK(WIFEXITED(status));
     CHECK(WEXITSTATUS(status) == 0);  // 변조 중에도 게임이 죽지 않는다
     CHECK(r.labels == 100);
@@ -221,6 +222,7 @@ TEST_CASE("S3-11 완료 기준: 실제 게임에 T-timer 100건 → 라벨 100, 
     CHECK(r.write_errors == 0);
     CHECK(r.order_errors == 0);
     CHECK(r.bad_log_lines == 0);
+    CHECK(r.allocs >= 2);  // 판 교체(state_free → state_alloc)를 지나며 주입했다
 
     /* 라벨 형식(§3)과 탐지 확인: 같은 name의 alert가 [inject_ns, inject_ns + 200ms] 안에 */
     std::vector<nlohmann::json> lab;

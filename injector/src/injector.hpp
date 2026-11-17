@@ -43,6 +43,7 @@ struct Result {
     unsigned      freed_writes = 0;    /* 사후 확인: 해제된 수명에 쓴 라벨 수 (0이어야 함) */
     unsigned      bad_log_lines = 0;
     std::uint64_t order_errors = 0;    /* 주소 로그 순서 위반(§3.1) */
+    std::uint64_t allocs = 0;          /* 본 state_alloc 수(판 수). 2 이상이면 판 교체를 지나며 주입한 것 */
     bool          target_exited = false;
 };
 

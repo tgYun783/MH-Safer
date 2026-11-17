@@ -241,6 +241,7 @@ bool run(const Options &opt, std::ostream &labels, Result &res, std::string &err
         if (f != 0 && c.inject_ns >= f) ++res.freed_writes;
     }
     res.order_errors = tracker.order_errors();
+    res.allocs = tracker.allocs();
     close(mem);
     return true;
 }

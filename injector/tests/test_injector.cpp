@@ -20,6 +20,7 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -90,7 +91,7 @@ TEST_CASE("주소 로그: 순서 위반은 센다 (free 없이 새 alloc, 다른
     CHECK(t.current() != nullptr);
 }
 
-TEST_CASE("시나리오 파싱: 최소 버전 지원 목록")
+TEST_CASE("시나리오 파싱: 지원 목록")
 {
     std::string err;
     auto s = parse_scenario("T-timer", err);
@@ -99,8 +100,16 @@ TEST_CASE("시나리오 파싱: 최소 버전 지원 목록")
     CHECK(s->var == "timer");
     CHECK_FALSE(s->hidden);
     CHECK(parse_scenario("V-mine_field", err));
-    CHECK_FALSE(parse_scenario("H-timer", err));  // S3-12
-    CHECK_FALSE(parse_scenario("T-cell_state", err));
+    auto h = parse_scenario("H-timer", err);  // S3-12
+    REQUIRE(h);
+    CHECK(h->hidden);
+    auto tc = parse_scenario("T-cell_state", err);
+    REQUIRE(tc);
+    CHECK(tc->needs_mine_field);
+    CHECK_FALSE(parse_scenario("V-cell_state", err)->needs_mine_field);
+    CHECK(supported_scenarios().size() == 14);  // experiment.md §4.1 표에서 "—"가 아닌 칸
+    CHECK_FALSE(parse_scenario("T-mine_field", err));  // 표의 "—"
+    CHECK_FALSE(parse_scenario("H-game_state", err));
     CHECK_FALSE(parse_scenario("bogus", err));
     CHECK_FALSE(err.empty());
 }
@@ -150,6 +159,40 @@ TEST_CASE("시나리오 값 계산")
     CHECK_FALSE(p->scalar);
     CHECK(p->offset == 17);
     CHECK(p->bytes == std::vector<std::uint8_t>{0});
+}
+
+TEST_CASE("S3-12 값 계산: 칸 열기는 닫힌 안전 칸만, H는 T와 같은 값 + hidden")
+{
+    std::mt19937 rng(3);
+    std::string err;
+    std::vector<std::uint8_t> cells(480, 1), mines(480, 0);
+    cells[5] = 0;
+    cells[9] = 0;
+    mines[5] = 1;  // 5는 닫혀 있지만 지뢰 → 고르면 안 된다
+    for (const char *name : {"T-cell_state", "H-cell_state"}) {
+        auto sc = *parse_scenario(name, err);
+        CHECK_FALSE(plan_write(sc, cells, rng));  // mine_field 모르면 쓰지 않는다
+        for (int i = 0; i < 20; ++i) {
+            auto p = plan_write(sc, cells, rng, &mines);
+            REQUIRE(p);
+            CHECK(p->offset == 9);
+            CHECK(p->bytes == std::vector<std::uint8_t>{1});
+            CHECK_FALSE(p->scalar);
+        }
+    }
+    cells[9] = 1;
+    CHECK_FALSE(plan_write(*parse_scenario("T-cell_state", err), cells, rng, &mines));  // 열 칸 없음
+
+    std::vector<std::uint8_t> t3{3, 0, 0, 0};
+    auto h = plan_write(*parse_scenario("H-timer", err), t3, rng);
+    REQUIRE(h);
+    CHECK(h->to == 4);
+    h = plan_write(*parse_scenario("H-cells_opened", err), t3, rng);
+    REQUIRE(h);
+    CHECK(h->to == 4);
+    h = plan_write(*parse_scenario("H-mines_remaining", err), t3, rng);
+    REQUIRE(h);
+    CHECK((h->to == 2 || h->to == 4));
 }
 
 /* ---------- 통합: 실제 게임 ---------- */
@@ -249,4 +292,67 @@ TEST_CASE("S3-11 완료 기준: 실제 게임에 T-timer 100건 → 라벨 100, 
     }
     MESSAGE("탐지(W=200ms 안 alert): " << matched << "/100, alert 총 " << al.size());
     CHECK(matched >= 95);
+}
+
+TEST_CASE("S3-12 완료 기준: §4.1 표의 칸마다 라벨이 나오고 H는 hidden=true")
+{
+    const std::string dir = INJECTOR_TEST_TMP;
+    const std::string addr = dir + "/all_addr.jsonl";
+    std::remove(addr.c_str());
+
+    pid_t child = fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) dup2(devnull, STDOUT_FILENO);
+        execl(INJECTOR_GAME_BIN, INJECTOR_GAME_BIN, "--bot", "--difficulty", "hard", "--seed", "2",
+              "--speed-ms", "50", "--duration-sec", "150", "--addr-log", addr.c_str(),
+              static_cast<char *>(nullptr));
+        _exit(127);
+    }
+    for (int i = 0; i < 500 && !file_exists(addr); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    REQUIRE(file_exists(addr));
+
+    constexpr unsigned kPerScenario = 3;
+    for (const auto &name : supported_scenarios()) {
+        CAPTURE(name);
+        Options opt;
+        opt.pid = child;
+        opt.addr_log = addr;
+        std::string err;
+        opt.scenario = *parse_scenario(name, err);
+        opt.count = kPerScenario;
+        opt.interval_ms = 100;
+        opt.jitter_ms = 20;
+        opt.duration_sec = 15;
+        opt.seed = 7;
+        std::ostringstream labels;
+        Result r;
+        REQUIRE_MESSAGE(run(opt, labels, r, err), err);
+        MESSAGE(name << ": labels=" << r.labels << " skipped=" << r.skipped << " h_timeouts=" << r.h_timeouts
+                     << " h_delay_max_ms=" << r.h_delay_max_ns / 1e6);
+        CHECK(r.labels == kPerScenario);
+        CHECK(r.write_errors == 0);
+        CHECK(r.freed_writes == 0);
+        CHECK_FALSE(r.target_exited);
+
+        std::istringstream in(labels.str());
+        std::string line;
+        unsigned n = 0;
+        while (std::getline(in, line)) {
+            auto l = nlohmann::json::parse(line);
+            ++n;
+            CHECK(l["scenario"] == name);
+            CHECK(l["name"] == name.substr(2));
+            CHECK(l["hidden"] == (name[0] == 'H'));
+            const bool array = name.substr(2) == "cell_state" || name.substr(2) == "mine_field";
+            CHECK(l["from"].is_null() == array);
+        }
+        CHECK(n == kPerScenario);
+    }
+
+    kill(child, SIGTERM);
+    int status = 0;
+    waitpid(child, &status, 0);
+    CHECK((WIFEXITED(status) || (WIFSIGNALED(status) && WTERMSIG(status) == SIGTERM)));  // 변조로 죽지 않았다
 }

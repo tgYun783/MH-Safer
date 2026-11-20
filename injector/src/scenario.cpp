@@ -44,52 +44,77 @@ std::optional<Plan> scalar_set(const std::vector<std::uint8_t> &cur, std::uint64
     return p;
 }
 
+std::optional<Plan> pick_one(const std::vector<std::size_t> &idx, std::uint8_t value, std::mt19937 &rng)
+{
+    if (idx.empty()) return std::nullopt;
+    std::uniform_int_distribution<std::size_t> pick(0, idx.size() - 1);
+    Plan p;
+    p.offset = idx[pick(rng)];
+    p.bytes = {value};
+    return p;
+}
+
 /* 배열에서 값이 0이 아닌 요소 하나를 무작위로 골라 0으로 */
 std::optional<Plan> clear_one(const std::vector<std::uint8_t> &cur, std::mt19937 &rng)
 {
     std::vector<std::size_t> idx;
     for (std::size_t i = 0; i < cur.size(); ++i)
         if (cur[i] != 0) idx.push_back(i);
-    if (idx.empty()) return std::nullopt;
-    std::uniform_int_distribution<std::size_t> pick(0, idx.size() - 1);
-    Plan p;
-    p.offset = idx[pick(rng)];
-    p.bytes = {0};
-    return p;
+    return pick_one(idx, 0, rng);
+}
+
+/* 닫힌(0) 안전 칸(mine_field 0) 하나를 무작위로 골라 열기(1) */
+std::optional<Plan> open_safe_one(const std::vector<std::uint8_t> &cells, const std::vector<std::uint8_t> *mines,
+                                  std::mt19937 &rng)
+{
+    if (mines == nullptr || mines->size() != cells.size()) return std::nullopt;
+    std::vector<std::size_t> idx;
+    for (std::size_t i = 0; i < cells.size(); ++i)
+        if (cells[i] == 0 && (*mines)[i] == 0) idx.push_back(i);
+    return pick_one(idx, 1, rng);
 }
 
 }  // namespace
 
+const std::vector<std::string> &supported_scenarios()
+{
+    static const std::vector<std::string> k = {
+        "T-timer", "T-mines_remaining", "T-cell_state", "T-cells_opened",
+        "V-timer", "V-mines_remaining", "V-mine_field", "V-cell_state", "V-cells_opened", "V-game_state",
+        "H-timer", "H-mines_remaining", "H-cell_state", "H-cells_opened",
+    };
+    return k;
+}
+
 std::optional<Scenario> parse_scenario(const std::string &s, std::string &err)
 {
-    static const char *const kSupported[] = {
-        "T-timer", "T-mines_remaining", "T-cells_opened",
-        "V-timer", "V-mines_remaining", "V-cells_opened", "V-game_state", "V-mine_field", "V-cell_state",
-    };
-    for (const char *k : kSupported) {
+    for (const auto &k : supported_scenarios()) {
         if (s == k) {
             Scenario sc;
             sc.type = s[0];
             sc.var = s.substr(2);
             sc.label = s;
-            sc.hidden = false;
+            sc.hidden = sc.type == 'H';
+            sc.needs_mine_field = sc.var == "cell_state" && sc.type != 'V';
             return sc;
         }
     }
-    err = "unsupported scenario '" + s + "' (S3-11 minimal: T-timer, T-mines_remaining, T-cells_opened, "
-          "V-timer, V-mines_remaining, V-cells_opened, V-game_state, V-mine_field, V-cell_state; "
-          "the rest arrive in S3-12)";
+    err = "unsupported scenario '" + s + "' (supported:";
+    for (const auto &k : supported_scenarios()) err += " " + k;
+    err += "; '—' cells of docs/experiment.md §4.1 are not scenarios)";
     return std::nullopt;
 }
 
-std::optional<Plan> plan_write(const Scenario &sc, const std::vector<std::uint8_t> &cur, std::mt19937 &rng)
+std::optional<Plan> plan_write(const Scenario &sc, const std::vector<std::uint8_t> &cur, std::mt19937 &rng,
+                               const std::vector<std::uint8_t> *mine_field)
 {
-    if (sc.type == 'T') {
+    if (sc.type == 'T' || sc.type == 'H') {
         if (sc.var == "timer" || sc.var == "cells_opened") return scalar_add(cur, 1);
         if (sc.var == "mines_remaining") {
             std::bernoulli_distribution sign(0.5);
             return scalar_add(cur, sign(rng) ? 1 : -1);
         }
+        if (sc.var == "cell_state") return open_safe_one(cur, mine_field, rng);
     } else if (sc.type == 'V') {
         if (sc.var == "timer") return scalar_set(cur, 0);
         if (sc.var == "mines_remaining") return scalar_set(cur, 999);

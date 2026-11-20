@@ -116,6 +116,10 @@ int main(int argc, char **argv)
                  opt.scenario.label.c_str(), r.labels, r.write_errors, r.freed_writes, r.skipped,
                  r.freeze_timeouts, static_cast<unsigned long long>(r.order_errors), r.bad_log_lines,
                  r.target_exited ? 1 : 0);
+    const double h_avg_ms = r.labels ? r.h_delay_sum_ns / 1e6 / r.labels : 0.0;
+    if (opt.scenario.hidden)
+        std::fprintf(stderr, "[injector] hidden: delay avg=%.3fms max=%.3fms timeouts=%u\n", h_avg_ms,
+                     r.h_delay_max_ns / 1e6, r.h_timeouts);
     if (!stats_path.empty()) {
         nlohmann::ordered_json j;
         j["scenario"] = opt.scenario.label;
@@ -127,6 +131,12 @@ int main(int argc, char **argv)
         j["order_errors"] = r.order_errors;
         j["bad_log_lines"] = r.bad_log_lines;
         j["target_exited"] = r.target_exited;
+        j["allocs"] = r.allocs;
+        if (opt.scenario.hidden) {  /* 정상 변경을 본 뒤 쓰기까지 */
+            j["h_delay_avg_ms"] = h_avg_ms;
+            j["h_delay_max_ms"] = r.h_delay_max_ns / 1e6;
+            j["h_timeouts"] = r.h_timeouts;
+        }
         std::ofstream out(stats_path);
         out << j.dump(2) << '\n';
     }

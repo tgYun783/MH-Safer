@@ -1,0 +1,7 @@
+{"experiment": "2048-normal", "seed": 1, "duration_sec": 600, "interval_ms": 160,
+ "command": "python3 -I examples/2048/autoplay.py --bin build/examples/2048 --rules examples/2048/rules.json --duration-sec 600 --seed 1 --alerts results/2026-11-23_2048-normal_1/alerts.jsonl --stats results/2026-11-23_2048-normal_1/stats.json",
+ "exit_code": 0, "base_commit": "e638a7e023216247bdba80a72b1d09f3fda04e31", "dirty": true,
+ "dirty_note": "S4-04 브랜치 s4/t4-2048 커밋 전 작업 트리(examples/ 추가분)에서 실행",
+ "upstream": "mevdschee/2048.c@90343eb209e84fa9687d596f5d5eecfdf7d4df51", "patch": "examples/2048/mtd.patch",
+ "build": "Release", "rules": "examples/2048/rules.json", "period_ms": 50, "enable_mprotect": 0,
+ "start_utc": null, "note": "start_utc 미기록. 종료 2026-11-23, Docker Desktop (macOS), 이미지 mh-safer-dev"}

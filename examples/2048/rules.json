@@ -1,0 +1,20 @@
+{
+  "schema_version": "0",
+  "program": "2048",
+  "note": "T4 이식성 검증(S4-04). 프로그램별 지식 전용. board는 규칙 형식에 맞는 예측 규칙이 없어 선언하지 않는다(규칙 없는 변수 = 어느 구간이든 합법, 구간 밖 변화만 behavior alert) — examples/README.md.",
+  "detect_window_ms": 200,
+  "default_event_window_ms": 50,
+  "variables": [
+    {
+      "name": "score",
+      "value": { "type": "scalar", "size": 4, "signed": false, "encoding": "uint", "compare": "value" },
+      "behavior": {
+        "mutable": true,
+        "allowed_in_tags": ["move", "restart"],
+        "required_event": null,
+        "event_window_ms": null
+      },
+      "prediction": { "rule": "monotonic", "params": { "direction": "non_decreasing" } }
+    }
+  ]
+}

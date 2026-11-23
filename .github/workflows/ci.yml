@@ -28,3 +28,40 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # S4-02: 실행 흐름(scripts/run-experiment.sh)으로 30초 실행 + 채점이 끝까지 도는지 확인.
+  # 주입기는 게임의 부모가 아니므로 SYS_PTRACE가 있는 개발 컨테이너(scripts/dev.sh)에서 돈다.
+  integration:
+    name: integration (run-experiment 30s + score)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 30초 변조 실행 (T-timer 5건)
+        run: RESULTS=ci-results SEEDS=1 DURATION=30 COUNT=5 SCENARIOS=T-timer scripts/run-experiment.sh T
+
+      - name: 결과 확인 (§6 파일 5종, TP ≥ 1, 주입기 종료 코드 0)
+        run: |
+          python3 -I - ci-results <<'PY'
+          import json, sys
+          from pathlib import Path
+          dirs = sorted(Path(sys.argv[1]).glob("*_tamper-T_1*"))
+          assert len(dirs) == 1, f"result folder: {dirs}"
+          d = dirs[0]
+          for f in ("meta.json", "addr.jsonl", "alerts.jsonl", "labels.jsonl", "score.json"):
+              assert (d / f).is_file(), f"missing {f}"
+          meta = json.loads((d / "meta.json").read_text())
+          assert meta["exit_code"] == 0, meta["exit_code"]
+          assert all(v == 0 for v in meta["injector_exit_codes"].values()), meta["injector_exit_codes"]
+          score = json.loads((d / "score.json").read_text())
+          print(json.dumps(score["counts"]))
+          assert score["counts"]["tp"] >= 1, "no TP"
+          PY
+
+      - name: 결과 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results
+          path: ci-results/
+          if-no-files-found: ignore

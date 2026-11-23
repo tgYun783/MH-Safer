@@ -9,6 +9,9 @@
  *   해제하므로, 멈춘 상태에서 state_free가 안 보이면 그 상태는 아직 살아 있다.
  *   (해제된 GameState에 쓰면 malloc 메타데이터를 깨 게임이 죽을 수 있다.)
  *   사후 확인: 라벨마다 그 수명의 state_free 시각을 기록해 inject_ns ≥ state_free.ns인 건수를 센다.
+ *
+ * H 은닉형(S3-12): 간격이 지나면 대상 변수를 0.2ms마다 읽어(멈추지 않음, 읽기는 안전) 값이 바뀌는
+ *   순간 = 게임의 정상 변경 직후를 잡고, 곧바로 위와 같은 멈춤 → 쓰기를 한다. 판이 바뀌면 다시 기다린다.
  */
 #ifndef INJECTOR_INJECTOR_HPP
 #define INJECTOR_INJECTOR_HPP
@@ -45,6 +48,10 @@ struct Result {
     std::uint64_t order_errors = 0;    /* 주소 로그 순서 위반(§3.1) */
     std::uint64_t allocs = 0;          /* 본 state_alloc 수(판 수). 2 이상이면 판 교체를 지나며 주입한 것 */
     bool          target_exited = false;
+    /* H(은닉형): 정상 변경을 본 시각 → 쓰기 시각 */
+    unsigned      h_timeouts = 0;      /* 5초 동안 정상 변경이 없어 다시 기다린 횟수 */
+    std::uint64_t h_delay_sum_ns = 0;
+    std::uint64_t h_delay_max_ns = 0;
 };
 
 /* 한 시나리오를 count건(또는 duration/대상 종료까지) 주입한다. labels에 JSONL(§3).

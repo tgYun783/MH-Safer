@@ -31,6 +31,7 @@ std::uint64_t monotonic_ns()
 namespace {
 
 void sleep_ms(unsigned ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+void sleep_us(unsigned us) { std::this_thread::sleep_for(std::chrono::microseconds(us)); }
 
 std::string hex(std::uint64_t v)
 {
@@ -157,19 +158,67 @@ bool run(const Options &opt, std::ostream &labels, Result &res, std::string &err
     const std::uint64_t deadline = opt.duration_sec ? start + opt.duration_sec * 1000000000ull : 0;
     auto schedule = [&] { return monotonic_ns() + (opt.interval_ms + jitter(rng)) * 1000000ull; };
     std::uint64_t next_at = schedule();
+    std::uint64_t last_alive_check = 0;
+
+    /* H: 정상 변경 대기 상태 */
+    const bool hidden_mode = opt.scenario.type == 'H';
+    bool                      armed = false;
+    std::uint64_t             arm_lifetime = 0;
+    std::uint64_t             arm_since = 0;
+    std::uint64_t             change_ns = 0;
+    std::vector<std::uint8_t> arm_bytes, now_bytes;
 
     while (res.labels < opt.count) {
         res.bad_log_lines += static_cast<unsigned>(tail.poll(tracker));
         std::uint64_t now = monotonic_ns();
         if (deadline && now >= deadline) break;
-        if (!target_alive(opt.pid)) {
-            res.target_exited = true;
-            break;
+        if (now - last_alive_check > 100000000ull) {  /* /proc 확인은 100ms마다 */
+            last_alive_check = now;
+            if (!target_alive(opt.pid)) {
+                res.target_exited = true;
+                break;
+            }
         }
         if (now < next_at) {
             std::uint64_t wait = (next_at - now) / 1000000ull;
             sleep_ms(wait > 5 ? 5u : (wait == 0 ? 1u : static_cast<unsigned>(wait)));
             continue;
+        }
+
+        if (hidden_mode) {
+            /* 정상 변경 직후를 잡는다: 같은 변수를 폴링해 값이 바뀌는 순간 */
+            const Lifetime *alt = tracker.current();
+            const Field *afd = alt ? tracker.field(opt.scenario.var) : nullptr;
+            if (afd == nullptr) {
+                armed = false;
+                sleep_us(200);
+                continue;
+            }
+            now_bytes.resize(afd->size);
+            if (pread(mem, now_bytes.data(), now_bytes.size(), static_cast<off_t>(alt->addr + afd->offset)) !=
+                static_cast<ssize_t>(now_bytes.size())) {
+                armed = false;
+                sleep_us(200);
+                continue;
+            }
+            if (!armed || arm_lifetime != alt->id) {
+                armed = true;
+                arm_lifetime = alt->id;
+                arm_bytes = now_bytes;
+                arm_since = now;
+                sleep_us(200);
+                continue;
+            }
+            if (now_bytes == arm_bytes) {
+                if (now - arm_since > 5000000000ull) {
+                    ++res.h_timeouts;
+                    armed = false;
+                }
+                sleep_us(200);
+                continue;
+            }
+            change_ns = monotonic_ns();  /* 정상 변경을 본 시각 */
+            armed = false;
         }
 
         /* --- 한 번 시도: 멈춤 → 로그 따라잡기 → 대상 확인 → 읽기 → 쓰기 → 재개 --- */
@@ -184,16 +233,29 @@ bool run(const Options &opt, std::ostream &labels, Result &res, std::string &err
         const Field *fd = lt ? tracker.field(opt.scenario.var) : nullptr;
         std::optional<Plan> plan;
         std::uint64_t base = 0;
+        if (hidden_mode && lt != nullptr && lt->id != arm_lifetime) fd = nullptr;  /* 그사이 판이 바뀜 */
         if (fd != nullptr) {
             base = lt->addr + fd->offset;
             std::vector<std::uint8_t> cur(fd->size);
             ssize_t n = pread(mem, cur.data(), cur.size(), static_cast<off_t>(base));
-            if (n == static_cast<ssize_t>(cur.size())) plan = plan_write(opt.scenario, cur, rng);
+            std::vector<std::uint8_t> mines;
+            bool mines_ok = true;
+            if (opt.scenario.needs_mine_field) {  /* 칸을 열 때 안전 칸만 고른다 */
+                const Field *mf = tracker.field("mine_field");
+                mines_ok = mf != nullptr;
+                if (mines_ok) {
+                    mines.resize(mf->size);
+                    mines_ok = pread(mem, mines.data(), mines.size(), static_cast<off_t>(lt->addr + mf->offset)) ==
+                               static_cast<ssize_t>(mines.size());
+                }
+            }
+            if (n == static_cast<ssize_t>(cur.size()) && mines_ok)
+                plan = plan_write(opt.scenario, cur, rng, opt.scenario.needs_mine_field ? &mines : nullptr);
         }
         if (!plan) {
             if (opt.freeze) thaw(opt.pid);
             ++res.skipped;  /* 대상 없음(판 사이·배치 전) 또는 지금은 의미 없는 값 → 곧 다시 */
-            sleep_ms(10);
+            sleep_ms(hidden_mode ? 1 : 10);
             continue;
         }
         const std::uint64_t addr = base + plan->offset;
@@ -226,6 +288,11 @@ bool run(const Options &opt, std::ostream &labels, Result &res, std::string &err
         labels << j.dump() << '\n';
         labels.flush();
         ++res.labels;
+        if (hidden_mode) {
+            const std::uint64_t d = inject_ns - change_ns;
+            res.h_delay_sum_ns += d;
+            if (d > res.h_delay_max_ns) res.h_delay_max_ns = d;
+        }
         tracker.watch(lifetime_id);
         checks.push_back({lifetime_id, inject_ns});
         if (opt.verbose)

@@ -1,0 +1,23 @@
+{
+ "program": "2048",
+ "seed": 1,
+ "duration_sec": 600.0,
+ "interval_ms": 160,
+ "games": 27,
+ "games_over": 26,
+ "moves_sent": 3695,
+ "crashes": 0,
+ "exit_codes": {
+  "0": 26
+ },
+ "alerts": 0,
+ "stderr_other": 27,
+ "stderr_other_samples": [
+  "[libmtd] warning: no rule for watched variable \"board\" (behavior-only, rule=null)",
+  "[libmtd] warning: no rule for watched variable \"board\" (behavior-only, rule=null)",
+  "[libmtd] warning: no rule for watched variable \"board\" (behavior-only, rule=null)",
+  "[libmtd] warning: no rule for watched variable \"board\" (behavior-only, rule=null)",
+  "[libmtd] warning: no rule for watched variable \"board\" (behavior-only, rule=null)"
+ ],
+ "elapsed_sec": 600.135
+}

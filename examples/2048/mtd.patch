@@ -1,0 +1,62 @@
+--- a/2048.c
++++ b/2048.c
+@@ -18,6 +18,7 @@
+ #include <stdint.h>		  // defines: uint8_t, uint32_t
+ #include <time.h>		  // defines: time
+ #include <signal.h>		  // defines: signal, SIGINT
++#include "mtd.h"
+ 
+ #define SIZE 4
+ 
+@@ -495,6 +496,9 @@
+ 	signal(SIGINT, signal_callback_handler);
+ 
+ 	initBoard(board);
++	mtd_init(getenv("MTD_RULES"), NULL);
++	mtd_watch(board, sizeof(board), "board");
++	mtd_watch(&score, sizeof(score), "score");
+ 	setBufferedInput(false);
+ 	drawBoard(board, scheme, score);
+ 	while (true)
+@@ -505,6 +509,7 @@
+ 			puts("\nError! Cannot read keyboard input!");
+ 			break;
+ 		}
++		mtd_begin("move");
+ 		switch (c)
+ 		{
+ 		case 52:  // '4' key
+@@ -534,11 +539,14 @@
+ 		default:
+ 			success = false;
+ 		}
++		mtd_end();
+ 		if (success)
+ 		{
+ 			drawBoard(board, scheme, score);
+ 			usleep(150 * 1000); // 150 ms
++			mtd_begin("spawn");
+ 			addRandom(board);
++			mtd_end();
+ 			drawBoard(board, scheme, score);
+ 			if (gameEnded(board))
+ 			{
+@@ -562,13 +570,18 @@
+ 			c = getchar();
+ 			if (c == 'y')
+ 			{
++				mtd_begin("restart");
++				mtd_unwatch(&score);
+ 				initBoard(board);
+ 				score = 0;
++				mtd_watch(&score, sizeof(score), "score");
++				mtd_end();
+ 			}
+ 			drawBoard(board, scheme, score);
+ 		}
+ 	}
+ 	setBufferedInput(true);
++	mtd_shutdown();
+ 
+ 	// make cursor visible, reset all modes
+ 	printf("\033[?25h\033[m");

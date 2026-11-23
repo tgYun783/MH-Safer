@@ -113,6 +113,7 @@ results/<YYYY-MM-DD>_<실험>_<시드>/
 - `addr`·`alerts`·`labels`는 **원본 데이터**다. 생성 후 고치지 않는다. 다시 돌리면 새 폴더를 만든다.
 - `results/`는 **저장소에 올린다**(11-16 PM 결정). 정상 10분 1회 ≈ 40KB라 작다. 한 실험 묶음이 10MB를 넘으면 그때 다시 정한다. 요약표는 `docs/results/`에 둔다.
 - 정상 플레이 수집은 `scripts/collect-normal.sh`(시드별 동시 실행, `meta.json`에 `concurrent_runs` 기록), 요약은 `scripts/summarize_normal.py`.
+- 실행 흐름(S4-01): `scripts/run-experiment.sh normal|T|V|H` 명령 하나로 빌드 → 시드별 동시 실행 → 채점 → 요약 표(`scripts/summarize_experiment.py`)까지 한다. 변조 실행은 유형의 시나리오를 한 게임 안에서 차례로(실행 시간을 시나리오 수로 나눈 구간마다 하나) 넣고, 시나리오마다 `labels_<시나리오>.jsonl`과 그 라벨만 채점한 `score_<시나리오>.json`을 남긴다. 칸별 TP·FN·지연은 `score_<시나리오>.json`, FP·오탐률은 실행 전체 `score.json`을 쓴다. 사용법은 스크립트 머리말.
 
 ## 7. 결정 (2026-11-16 PM 결정, 원래 열린 질문)
 - [x] **오탐률 분모** → **합법 구간 수(`mtd_end` 호출 수)**. 오탐률 = FP / `mtd_end` 호출 수. 함께 **10분당 FP 건수**(절대값)를 보고한다. 근거: alert 수를 분모로 쓰면 정상 플레이에서 1건만 나와도 100%가 되고, 검사 횟수(변수 × 주기)는 분모가 커서 오탐률이 실제보다 좋아 보인다. 합법 구간은 "정상 변경 기회" 수라 뜻이 분명하다. 채점기(S3-21)가 `mtd_end` 호출 수를 세려면 게임이 구간 수를 남겨야 한다 → S3-02에서 alert 로그와 함께 출력.

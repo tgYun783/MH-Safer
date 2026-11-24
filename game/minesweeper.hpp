@@ -105,7 +105,9 @@ private:
 class Bot {
 public:
     explicit Bot(std::uint32_t seed);
+
     bool step(Game &game);
+    bool has_safe_hidden_cells(const Game &game) const;
 
 private:
     std::mt19937 random_;

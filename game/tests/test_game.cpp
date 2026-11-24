@@ -246,6 +246,48 @@ TEST_CASE("주소 로그는 상태 생성·지뢰 감시·해제 순서로 JSONL
     CHECK_FALSE(logger.failed());
 }
 
+TEST_CASE("주소 로그는 봇 100판의 수명 순서와 판 사이 순서를 보존한다")
+{
+    std::ostringstream output;
+    minesweeper::AddressLogger logger{output};
+
+    for (std::uint32_t seed = 1; seed <= 100; ++seed) {
+        minesweeper::Game game(minesweeper::config_for(minesweeper::Difficulty::easy),
+                               seed, minesweeper::StateAllocator{}, logger.observer());
+        minesweeper::Bot bot{seed ^ 0x5bd1e995u};
+        for (int step = 0; step < 200 &&
+             game.state().game_state == minesweeper::GameStatus::playing;
+             ++step) {
+            bot.step(game);
+        }
+    }
+
+    std::istringstream input{output.str()};
+    std::vector<nlohmann::json> records;
+    std::string line;
+    while (std::getline(input, line)) {
+        records.push_back(nlohmann::json::parse(line));
+    }
+
+    REQUIRE(records.size() == 300);
+    for (std::size_t index = 0; index < records.size(); index += 3) {
+        CHECK(records[index]["event"] == "state_alloc");
+        CHECK(records[index + 1]["event"] == "field_watch");
+        CHECK(records[index + 2]["event"] == "state_free");
+        CHECK(records[index]["addr"] == records[index + 1]["addr"]);
+        CHECK(records[index]["addr"] == records[index + 2]["addr"]);
+        CHECK(records[index]["ns"].get<std::uint64_t>() <=
+              records[index + 1]["ns"].get<std::uint64_t>());
+        CHECK(records[index + 1]["ns"].get<std::uint64_t>() <=
+              records[index + 2]["ns"].get<std::uint64_t>());
+        if (index + 3 < records.size()) {
+            CHECK(records[index + 2]["ns"].get<std::uint64_t>() <
+                  records[index + 3]["ns"].get<std::uint64_t>());
+        }
+    }
+    CHECK_FALSE(logger.failed());
+}
+
 // ---- S3-02: 감시 변수는 해당 구간 안에서만 바뀐다 (game/AGENTS.md "값 변경은 구간 안에서만") ----
 namespace {
 

@@ -21,6 +21,7 @@ libmtd의 첫 사용처이자 실험 대상 프로그램. 시드 기반 터미�
 ## 꼭 지킬 것
 - **값 변경은 구간 안에서만**: 감시 변수를 바꾸는 코드는 해당 구간(`tick`·`flag`·`reveal`·`win-check`) 안에 있어야 한다. 구간 밖 대입은 곧 오탐이다. 칸 열기(`reveal`)와 승패 대입(`win-check`)은 다른 구간(11-11 결정). 코어는 `Game::scope_begin`/`scope_end`(옵저버 훅)로 감싼다. `test_game`의 "봇 1,000판" 테스트가 구간 밖 변화 0과 구간별 허용 변수를 검사하므로, 감시 변수를 바꾸는 코드를 추가하면 이 테스트가 잡는다.
 - **판 교체 순서**: 새 `Game`을 만들기 전에 이전 판을 먼저 해제한다(`game.reset()`). 순서가 바뀌면 감시 수가 순간적으로 11개가 되고 주소 로그에서 판이 겹친다.
+- 봇이 안전한 칸을 열 수 없고 `playing` 상태가 1초 이상 지속되면 판을 버리고 새 판으로 교체한다. 버린 판은 `abandoned_games`로 따로 집계한다.
 - **수명 순서**(`docs/interface.md` §3.1): 생성 직후 `mine_field`를 뺀 6개 `mtd_watch` → `state_alloc` 기록 / 지뢰 배치 직후 `mine_field` `mtd_watch` → `field_watch` 기록 / `state_free` 기록 → `mtd_unwatch` → 해제. 순서를 바꾸면 주입기·채점이 틀어진다.
 - **게임 지식은 여기에**: 변수 규칙을 libmtd 코드로 옮기지 않는다. `rules.json`을 고친다.
 - 오탐률 측정용 봇 실행은 `--speed-ms`를 줘서 한 판이 수 초 이상 이어지게 한다(`--speed-ms 0`이면 `timer`가 한 번도 오르지 않음). 측정 조건은 `docs/experiment.md`(S2-05).

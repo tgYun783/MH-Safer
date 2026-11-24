@@ -319,6 +319,24 @@ void Game::tick()
 
 Bot::Bot(std::uint32_t seed) : random_(seed) {}
 
+bool Bot::has_safe_hidden_cells(const Game &game) const
+{
+    const GameState &state = game.state();
+    if (state.game_state != GameStatus::playing) {
+        return false;
+    }
+
+    const std::size_t total_cells =
+        static_cast<std::size_t>(state.rows) * state.columns;
+    for (std::size_t cell = 0; cell < total_cells; ++cell) {
+        if (state.cell_state[cell] == hidden_cell && state.flagged[cell] == 0 &&
+            (!state.mines_placed || state.mine_field[cell] != mine_cell)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Bot::step(Game &game)
 {
     const GameState &state = game.state();

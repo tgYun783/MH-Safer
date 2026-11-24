@@ -24,7 +24,7 @@ cmake --build build -j
 | `--rules FILE` | 규칙 파일. 로드에 실패하면 종료 코드 2 |
 | `--no-mtd` | libmtd를 켜지 않음 |
 | `--alert-log FILE` | alert를 JSONL로 기록(`docs/interface.md` §2). 배열 변수의 `expected`/`actual`은 `null` |
-| `--stats FILE` | 실행 요약 JSON: 판 수, `alerts`, `mtd_end_count`(오탐률 분모, `docs/experiment.md` §7), `watch_errors` |
+| `--stats FILE` | 실행 요약 JSON: 판 수, 버린 판 수 `abandoned_games`, `alerts`, `mtd_end_count`(오탐률 분모, `docs/experiment.md` §7), `watch_errors` |
 
 봇 상태 줄과 대화형 화면 머리에 `alerts=N`이 나옵니다.
 

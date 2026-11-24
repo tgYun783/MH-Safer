@@ -10,6 +10,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -38,6 +39,7 @@ struct Options {
 struct RunStats {
     std::uint64_t won = 0;
     std::uint64_t lost = 0;
+    std::uint64_t abandoned = 0;
     double elapsed_seconds = 0;
 };
 
@@ -123,9 +125,11 @@ const minesweeper::MtdMonitor *g_monitor = nullptr;  // status output only
 
 void print_bot_summary(std::uint64_t completed_games,
                        std::uint64_t lost_games,
+                       std::uint64_t abandoned_games,
                        const Game &game)
 {
     std::cout << "games=" << completed_games << " losses=" << lost_games
+              << " abandoned=" << abandoned_games
               << " timer=" << game.state().timer_seconds << "s";
     if (g_monitor != nullptr) {
         std::cout << " alerts=" << g_monitor->alerts() << " scopes=" << g_monitor->scopes();
@@ -139,12 +143,14 @@ int run_bot(const Options &options, minesweeper::StateObserver observer, RunStat
     minesweeper::Bot bot{options.seed ^ 0x9e3779b9u};
     std::uint64_t completed_games = 0;
     std::uint64_t lost_games = 0;
+    std::uint64_t abandoned_games = 0;
     std::uint32_t game_seed = options.seed;
     auto game = std::make_unique<Game>(config, game_seed,
                                        minesweeper::StateAllocator{}, observer);
     const auto started_at = std::chrono::steady_clock::now();
     auto next_tick = started_at + std::chrono::seconds(1);
     auto next_status = started_at + std::chrono::seconds(10);
+    std::optional<std::chrono::steady_clock::time_point> stuck_since;
 
     while (options.duration_seconds == 0 ||
            std::chrono::steady_clock::now() - started_at <
@@ -165,24 +171,41 @@ int run_bot(const Options &options, minesweeper::StateObserver observer, RunStat
             game.reset();  // state_free + unwatch before the next state_alloc
             game = std::make_unique<Game>(config, game_seed,
                                           minesweeper::StateAllocator{}, observer);
+            stuck_since.reset();
             continue;
         }
 
-        bot.step(*game);
+        if (!bot.has_safe_hidden_cells(*game)) {
+            if (!stuck_since.has_value()) {
+                stuck_since = now;
+            } else if (now - *stuck_since >= std::chrono::seconds(1)) {
+                ++abandoned_games;
+                ++game_seed;
+                game.reset();  // state_free + unwatch before the next state_alloc
+                game = std::make_unique<Game>(config, game_seed,
+                                              minesweeper::StateAllocator{}, observer);
+                stuck_since.reset();
+                continue;
+            }
+        } else {
+            stuck_since.reset();
+            bot.step(*game);
+        }
         if (options.speed_ms != 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(options.speed_ms));
         }
 
         if (options.duration_seconds != 0 &&
             std::chrono::steady_clock::now() >= next_status) {
-            print_bot_summary(completed_games, lost_games, *game);
+            print_bot_summary(completed_games, lost_games, abandoned_games, *game);
             next_status += std::chrono::seconds(10);
         }
     }
 
-    print_bot_summary(completed_games, lost_games, *game);
+    print_bot_summary(completed_games, lost_games, abandoned_games, *game);
     stats.won = completed_games;
     stats.lost = lost_games;
+    stats.abandoned = abandoned_games;
     stats.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count();
     return 0;
@@ -334,7 +357,9 @@ void write_stats(const Options &options, const RunStats &stats,
         << ",\"seed\":" << options.seed << ",\"speed_ms\":" << options.speed_ms
         << ",\"duration_sec\":" << options.duration_seconds
         << ",\"elapsed_sec\":" << stats.elapsed_seconds << ",\"games_won\":" << stats.won
-        << ",\"games_lost\":" << stats.lost << ",\"mtd\":" << (monitor ? "true" : "false");
+        << ",\"games_lost\":" << stats.lost
+        << ",\"abandoned_games\":" << stats.abandoned
+        << ",\"mtd\":" << (monitor ? "true" : "false");
     if (monitor != nullptr) {
         out << ",\"alerts\":" << monitor->alerts() << ",\"mtd_end_count\":" << monitor->scopes()
             << ",\"watch_errors\":" << monitor->watch_errors();
